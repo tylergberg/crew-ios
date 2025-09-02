@@ -17,4 +17,4 @@ jobs:
       - name: Build
         run: |
           cd finalsend
-          xcodebuild -project finalsend.xcodeproj -scheme finalsend -destination 'platform=iOS Simulator,name=iPhone 15' build | tee build.log
+          xcodebuild -project finalsend.xcodeproj -scheme finalsend -destination 'generic/platform=iOS' build | tee build.log
