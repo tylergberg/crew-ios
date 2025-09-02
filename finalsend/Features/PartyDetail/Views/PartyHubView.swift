@@ -622,8 +622,8 @@ struct PartyHubView: View {
                     action: { showPackingModal = true }
                 )
                 FeaturePreviewCard(
-                    title: "Shop",
-                    subtitle: "Merch & supplies",
+                    title: "Merch",
+                    subtitle: "Custom apparel & accessories",
                     icon: "tshirt",
                     color: Color.brandBlue,
                     action: { showShopModal = true }
