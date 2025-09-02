@@ -392,6 +392,7 @@ struct PartyHubView: View {
     @State private var showEditDatesModal = false
     @State private var showEditLocationModal = false
     @State private var rsvpAttendee: PartyAttendee?
+    @State private var showEditPartyVibeModal = false
 
     @State private var chatAttendees: [ChatUserSummary] = []
     
@@ -544,10 +545,22 @@ struct PartyHubView: View {
                 )
                 FeaturePreviewCard(
                     title: "Vibe",
-                    subtitle: "Theme, colors, energy",
+                    subtitle: {
+                        if partyManager.vibeTags.isEmpty {
+                            return "Add trip vibe tags"
+                        } else {
+                            let displayTags = Array(partyManager.vibeTags.prefix(3))
+                            let remaining = partyManager.vibeTags.count - 3
+                            if remaining > 0 {
+                                return "\(displayTags.joined(separator: ", ")) +\(remaining) more"
+                            } else {
+                                return displayTags.joined(separator: ", ")
+                            }
+                        }
+                    }(),
                     icon: "sparkles",
-                    color: .purple,
-                    action: {}
+                    color: Color.brandBlue,
+                    action: { showEditPartyVibeModal = true }
                 )
                 
                 FeaturePreviewCard(
@@ -804,6 +817,14 @@ struct PartyHubView: View {
             .environmentObject(partyManager)
         }
 
+        .sheet(isPresented: $showEditPartyVibeModal) {
+            EditPartyVibeSheet(onSaved: {
+                Task {
+                    await dataManager.refreshData()
+                }
+            })
+            .environmentObject(partyManager)
+        }
 
         .onReceive(NotificationCenter.default.publisher(for: .refreshPartyData)) { _ in
             // Refresh data when party data is updated
