@@ -6,10 +6,121 @@ import Supabase
 
 // LodgingStore now implemented in Features/PartyDetail/Tabs/Lodging/Stores
 
+
+
+
+
 @MainActor
 final class TasksStore: ObservableObject {
-    func load(partyId: UUID) async {}
-    func teardown() {}
+    @Published var tasks: [TaskModel] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let client = SupabaseManager.shared.client
+    
+    func load(partyId: UUID) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // Use a custom decoder to handle date parsing with user data
+            let response: [PartyTaskResponse] = try await client
+                .from("tasks")
+                .select("""
+                    *,
+                    assigned_user:profiles!tasks_assigned_to_fkey(
+                        id,
+                        full_name
+                    ),
+                    creator_user:profiles!tasks_created_by_fkey(
+                        id,
+                        full_name
+                    )
+                """)
+                .eq("party_id", value: partyId)
+                .order("created_at", ascending: false)
+                .execute()
+                .value
+            
+            // Convert to TaskModel with proper date handling
+            let taskModels = response.compactMap { taskResponse -> TaskModel? in
+                do {
+                    return try TaskModel(from: taskResponse)
+                } catch {
+                    AppLogger.error("TasksStore: Error converting task \(taskResponse.id): \(error)")
+                    return nil
+                }
+            }
+            
+            await MainActor.run {
+                self.tasks = taskModels
+            }
+            
+            AppLogger.success("TasksStore: Loaded \(taskModels.count) tasks for party \(partyId)")
+        } catch {
+            AppLogger.error("TasksStore: Error loading tasks: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to load tasks: \(error.localizedDescription)"
+            }
+        }
+        
+        isLoading = false
+    }
+    
+    func addTask(_ task: TaskModel) async throws {
+        let response: TaskModel = try await client
+            .from("tasks")
+            .insert(task)
+            .select()
+            .single()
+            .execute()
+            .value
+        
+        await MainActor.run {
+            self.tasks.insert(response, at: 0)
+        }
+        
+        AppLogger.success("TasksStore: Added task \(response.title)")
+    }
+    
+    func updateTask(_ task: TaskModel) async throws {
+        let response: TaskModel = try await client
+            .from("tasks")
+            .update(task)
+            .eq("id", value: task.id)
+            .select()
+            .single()
+            .execute()
+            .value
+        
+        await MainActor.run {
+            if let index = self.tasks.firstIndex(where: { $0.id == task.id }) {
+                self.tasks[index] = response
+            }
+        }
+        
+        AppLogger.success("TasksStore: Updated task \(response.title)")
+    }
+    
+    func deleteTask(_ taskId: UUID) async throws {
+        try await client
+            .from("tasks")
+            .delete()
+            .eq("id", value: taskId)
+            .execute()
+        
+        await MainActor.run {
+            self.tasks.removeAll { $0.id == taskId }
+        }
+        
+        AppLogger.success("TasksStore: Deleted task \(taskId)")
+    }
+    
+    func teardown() {
+        tasks = []
+        isLoading = false
+        errorMessage = nil
+    }
 }
 
 final class VendorService {
@@ -151,7 +262,9 @@ final class CityLookupService {
     func fetchCityById(_ id: UUID) async throws -> CityCore? { CityCore(city: "") }
 }
 
-// MARK: - Simple placeholder views used by fullScreenCovers
+
+
+
 struct ItineraryView: View {
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var sessionManager: SessionManager
