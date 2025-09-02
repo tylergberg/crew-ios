@@ -152,17 +152,6 @@ final class CityLookupService {
 }
 
 // MARK: - Simple placeholder views used by fullScreenCovers
-struct TransportTabView: View {
-    let partyId: UUID
-    let currentUserId: UUID
-    let currentUserRole: UserRole
-    let destinationCity: String?
-    let partyStartDate: Date
-    let partyEndDate: Date
-    var body: some View { Text("Transport (placeholder)") }
-}
-
-
 struct ItineraryView: View {
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var sessionManager: SessionManager
