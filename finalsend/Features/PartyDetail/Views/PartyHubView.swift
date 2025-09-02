@@ -55,7 +55,7 @@ class PartyDataManager: ObservableObject {
         self.isAttendeesLoading = true
         
         do {
-            // Create a custom struct to match the joined data structure
+            // Use view with joined profile data to align with RLS and schema
             struct PartyMemberRow: Decodable {
                 let id: UUID
                 let party_id: String
@@ -65,21 +65,13 @@ class PartyDataManager: ObservableObject {
                 let special_role: String?
                 let created_at: String?
                 let updated_at: String?
-                let departure_city: String?
-                
-                // Joined profile data
-                let profiles: ProfileData?
-                
-                struct ProfileData: Decodable {
-                    let id: String
-                    let email: String?
-                    let full_name: String?
-                    let avatar_url: String?
-                }
+                let full_name: String?
+                let avatar_url: String?
+                let email: String?
             }
-            
+
             let response: [PartyMemberRow] = try await SupabaseManager.shared.client
-                .from("party_members")
+                .from("party_member_view")
                 .select("""
                     id,
                     party_id,
@@ -89,13 +81,9 @@ class PartyDataManager: ObservableObject {
                     special_role,
                     created_at,
                     updated_at,
-                    departure_city,
-                    profiles!party_members_user_id_fkey(
-                        id,
-                        email,
-                        full_name,
-                        avatar_url
-                    )
+                    full_name,
+                    avatar_url,
+                    email
                 """)
                 .eq("party_id", value: partyId)
                 .execute()
@@ -107,9 +95,9 @@ class PartyDataManager: ObservableObject {
             var attendeesWithCurrentUser: [PartyAttendee] = []
             
             for member in response {
-                let fullName = member.profiles?.full_name ?? "Unknown"
-                let email = member.profiles?.email ?? ""
-                let avatarUrl = member.profiles?.avatar_url
+                let fullName = member.full_name ?? "Unknown"
+                let email = member.email ?? ""
+                let avatarUrl = member.avatar_url
                 
                 // Map role string to UserRole enum
                 let userRole: UserRole
@@ -200,8 +188,8 @@ class PartyDataManager: ObservableObject {
         self.successMessage = nil
         
         // Initialize shared services
-        self.expensesStore = ExpensesStore()
-        self.lodgingStore = LodgingStore(partyId: partyId)
+        self.expensesStore = ExpensesStore(supabase: SupabaseManager.shared.client)
+        self.lodgingStore = LodgingStore(supabase: SupabaseManager.shared.client)
         self.vendorService = VendorService()
         self.itineraryService = ItineraryService()
         self.flightsService = FlightsService(supabase: SupabaseManager.shared.client)
@@ -212,20 +200,10 @@ class PartyDataManager: ObservableObject {
         
         // Initialize packing store
         let supabase = SupabaseManager.shared.client
-        let packingService = PackingService(supabase: supabase)
-        let realtimeService = PackingRealtime(client: supabase)
-        self.packingStore = PackingStore(
-            packingService: packingService,
-            realtimeService: realtimeService
-        )
+        self.packingStore = PackingStore(supabase: supabase)
         
         // Initialize tasks store
-        let tasksService = TasksService(supabase: supabase)
-        let tasksRealtimeService = TasksRealtimeService()
-        self.tasksStore = TasksStore(
-            tasksService: tasksService,
-            realtimeService: tasksRealtimeService
-        )
+        self.tasksStore = TasksStore()
         
         // Load attendees first (shared data)
         await loadAttendees(partyId: partyId, currentUserId: currentUserId)
@@ -255,13 +233,13 @@ class PartyDataManager: ObservableObject {
         // Pass the already-loaded attendees to prevent duplicate fetch
         await expensesStore?.loadAllWithAttendees(
             partyId: partyUUID, 
-            currentUserId: userUUID, 
-            attendees: attendees
+            userId: userUUID
         )
     }
     
     private func loadLodgingData() async {
-        await lodgingStore?.loadLodgings()
+        guard let partyUUID = UUID(uuidString: currentPartyId ?? "") else { return }
+        await lodgingStore?.loadLodgings(partyId: partyUUID)
     }
     
     private func loadVendorData() async {
@@ -398,32 +376,57 @@ struct PartyHubView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @StateObject private var dataManager = PartyDataManager()
     @State private var showChatModal = false
+    @State private var showExpensesModal = false
+    @State private var showTransportModal = false
+    @State private var showLodgingModal = false
+    @State private var showItineraryModal = false
+    @State private var showTasksModal = false
+    @State private var showPackingModal = false
+    @State private var showGamesModal = false
+    @State private var showGalleryModal = false
+    @State private var showVendorsModal = false
+    @State private var showShopModal = false
+    @State private var showCrewModal = false
 
     @State private var chatAttendees: [ChatUserSummary] = []
     
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 24) {
-                // About/Hero Section
+                // Party header with square cover image (like dashboard)
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Image(systemName: "party.popper.fill")
-                            .font(.title2)
-                            .foregroundColor(.brandBlue)
-                            .frame(width: 24)
-                        
-                        Text("Party Details")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.titleDark)
-                        
-                        Spacer()
+                    GeometryReader { geometry in
+                        ZStack(alignment: .topTrailing) {
+                            CoverPhotoView(
+                                imageURL: partyManager.coverImageURL,
+                                width: geometry.size.width,
+                                height: geometry.size.width,
+                                cornerRadius: 16,
+                                placeholderIcon: "photo",
+                                placeholderText: "No Cover Photo"
+                            )
+                            
+                            if let statusText = statusPillText() {
+                                Text(statusText)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(getStatusBackgroundColor())
+                                    .cornerRadius(8)
+                                    .padding(12)
+                            }
+                        }
+                        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
                     }
+                    .aspectRatio(1, contentMode: .fit)
                     
                     Text(partyManager.name.isEmpty ? "Untitled Party" : partyManager.name)
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.titleDark)
+                        .frame(maxWidth: .infinity, alignment: .center)
                     
                     if !partyManager.description.isEmpty {
                         Text(partyManager.description)
@@ -440,131 +443,123 @@ struct PartyHubView: View {
                 )
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                 
-                // Crew Section
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Image(systemName: "person.3.fill")
-                            .font(.title3)
-                            .foregroundColor(.brandBlue)
-                            .frame(width: 24)
-                        
-                        Text("Crew")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.titleDark)
-                        
-                        Spacer()
-                        
-                        if dataManager.isAttendeesLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Text("\(dataManager.attendees.count)")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    if dataManager.isAttendeesLoading {
-                        Text("Loading attendees...")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    } else if dataManager.attendees.isEmpty {
-                        Text("No attendees yet")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    } else {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 8) {
-                            ForEach(dataManager.attendees.prefix(8), id: \.id) { attendee in
-                                VStack {
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .frame(width: 40, height: 40)
-                                        .overlay(
-                                            Text(attendee.fullName.prefix(1).uppercased())
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.secondary)
-                                        )
-                                    Text(attendee.fullName)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(20)
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(partyManager.currentTheme.primaryAccentColor.opacity(0.3), lineWidth: 1)
+                // Crew (summary row)
+                FeaturePreviewCard(
+                    title: "Crew",
+                    subtitle: dataManager.isAttendeesLoading ? "Loading attendees…" : (dataManager.attendees.isEmpty ? "No attendees yet" : "\(dataManager.attendees.count) attendees"),
+                    icon: "person.3.fill",
+                    color: .brandBlue,
+                    action: { showCrewModal = true }
                 )
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                 
-                // Party Type Section
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Image(systemName: "tag.fill")
-                            .font(.title3)
-                            .foregroundColor(.brandBlue)
-                            .frame(width: 24)
-                        
-                        Text("Party Type")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.titleDark)
-                        
-                        Spacer()
-                    }
-                    
-                    Text(partyManager.partyType.isEmpty ? "Not specified" : partyManager.partyType)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(20)
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(partyManager.currentTheme.primaryAccentColor.opacity(0.3), lineWidth: 1)
+                // Party Type (summary row)
+                FeaturePreviewCard(
+                    title: "Party Type",
+                    subtitle: partyManager.partyType.isEmpty ? "Not specified" : partyManager.partyType,
+                    icon: "tag.fill",
+                    color: .brandBlue,
+                    action: {}
                 )
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                 
-                // Dates Section
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Image(systemName: "calendar")
-                            .font(.title3)
-                            .foregroundColor(.brandBlue)
-                            .frame(width: 24)
-                        
-                        Text("Dates")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.titleDark)
-                        
-                        Spacer()
-                    }
-                    
-                    Text("Start: \(partyManager.startDate, style: .date)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("End: \(partyManager.endDate, style: .date)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(20)
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(partyManager.currentTheme.primaryAccentColor.opacity(0.3), lineWidth: 1)
+                // Dates (summary row)
+                FeaturePreviewCard(
+                    title: "Dates",
+                    subtitle: {
+                        let f = DateFormatter()
+                        f.dateStyle = .medium
+                        f.timeStyle = .none
+                        return "Start: \(f.string(from: partyManager.startDate)) – End: \(f.string(from: partyManager.endDate))"
+                    }(),
+                    icon: "calendar",
+                    color: .brandBlue,
+                    action: {}
                 )
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                
+                // Feature placeholders – flat list
+                FeaturePreviewCard(
+                    title: "Location",
+                    subtitle: "Set destination & city",
+                    icon: "mappin.and.ellipse",
+                    color: .brandBlue,
+                    action: {}
+                )
+                FeaturePreviewCard(
+                    title: "Vibe",
+                    subtitle: "Theme, colors, energy",
+                    icon: "sparkles",
+                    color: .purple,
+                    action: {}
+                )
+                FeaturePreviewCard(
+                    title: "Itinerary",
+                    subtitle: "Plan events & schedule",
+                    icon: "calendar.badge.clock",
+                    color: .indigo,
+                    action: { showItineraryModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Transport",
+                    subtitle: "Flights & rides",
+                    icon: "car",
+                    color: .teal,
+                    action: { showTransportModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Lodging",
+                    subtitle: "Stay details & rooms",
+                    icon: "house",
+                    color: .orange,
+                    action: { showLodgingModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Packing",
+                    subtitle: "Shared packing lists",
+                    icon: "shippingbox",
+                    color: .orange,
+                    action: { showPackingModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Shop",
+                    subtitle: "Merch & supplies",
+                    icon: "tshirt",
+                    color: .mint,
+                    action: { showShopModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Games",
+                    subtitle: "Activities & icebreakers",
+                    icon: "gamecontroller",
+                    color: .pink,
+                    action: { showGamesModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Expenses",
+                    subtitle: "Track spending & splits",
+                    icon: "dollarsign.circle",
+                    color: .green,
+                    action: { showExpensesModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "Album",
+                    subtitle: "Photos & memories",
+                    icon: "photo.on.rectangle",
+                    color: .indigo,
+                    action: { showGalleryModal = true }
+                )
+                FeaturePreviewCard(
+                    title: "AI Assistant",
+                    subtitle: "Plan smarter with AI",
+                    icon: "wand.and.stars",
+                    color: .purple,
+                    action: {}
+                )
+                FeaturePreviewCard(
+                    title: "Chat",
+                    subtitle: "Group messages",
+                    icon: "message",
+                    color: .brandBlue,
+                    action: { showChatModal = true }
+                )
                 
                 // RSVP Section
                 if let currentUserAttendee = dataManager.attendees.first(where: { $0.isCurrentUser }) {
@@ -649,10 +644,9 @@ struct PartyHubView: View {
             )
         }
         .fullScreenCover(isPresented: $showItineraryModal) {
-            ItineraryView(
-                partyManager: partyManager,
-                sessionManager: sessionManager
-            )
+            ItineraryView()
+                .environmentObject(partyManager)
+                .environmentObject(sessionManager)
         }
         .fullScreenCover(isPresented: $showTasksModal) {
             TasksTabView(
@@ -686,6 +680,16 @@ struct PartyHubView: View {
                 userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role.rawValue ?? "attendee"
             )
         }
+        .fullScreenCover(isPresented: $showCrewModal) {
+            if let partyUUID = UUID(uuidString: partyId), let currentUserUUID = UUID(uuidString: sessionManager.userProfile?.id ?? "") {
+                CrewTabView(
+                    partyId: partyUUID,
+                    currentUserId: currentUserUUID,
+                    crewService: CrewService()
+                )
+                .environmentObject(dataManager)
+            }
+        }
 
 
         .onReceive(NotificationCenter.default.publisher(for: .refreshPartyData)) { _ in
@@ -702,18 +706,14 @@ struct PartyHubView: View {
             // Load data when PartyManager becomes loaded
             if isLoaded {
                 let currentUserId = sessionManager.userProfile?.id ?? ""
-                if !currentUserId.isEmpty {
-                    Task {
-                        print("🎯 PartyHubView: PartyManager loaded, starting data load for party \(partyId)")
-                        await dataManager.loadAllData(
-                            partyId: partyId,
-                            currentUserId: currentUserId,
-                            attendeesCount: partyManager.partySize
-                        )
-                        print("✅ PartyHubView: Data load completed for party \(partyId)")
-                    }
-                } else {
-                    print("⚠️ PartyHubView: PartyManager loaded but no current user ID available")
+                Task {
+                    print("🎯 PartyHubView: PartyManager loaded, starting data load for party \(partyId), currentUserId: \(currentUserId.isEmpty ? "<empty>" : currentUserId)")
+                    await dataManager.loadAllData(
+                        partyId: partyId,
+                        currentUserId: currentUserId,
+                        attendeesCount: partyManager.partySize
+                    )
+                    print("✅ PartyHubView: Data load completed for party \(partyId) [onChange isLoaded]")
                 }
             }
         }
@@ -721,21 +721,25 @@ struct PartyHubView: View {
             // If PartyManager is already loaded when view appears, load data immediately
             if partyManager.isLoaded {
                 let currentUserId = sessionManager.userProfile?.id ?? ""
-                if !currentUserId.isEmpty {
-                    Task {
-                        print("🎯 PartyHubView: PartyManager already loaded, starting data load for party \(partyId)")
-                        await dataManager.loadAllData(
-                            partyId: partyId,
-                            currentUserId: currentUserId,
-                            attendeesCount: partyManager.partySize
-                        )
-                        print("✅ PartyHubView: Data load completed for party \(partyId)")
-                    }
-                } else {
-                    print("⚠️ PartyHubView: PartyManager already loaded but no current user ID available")
+                Task {
+                    print("🎯 PartyHubView: onAppear load start for party \(partyId), currentUserId: \(currentUserId.isEmpty ? "<empty>" : currentUserId)")
+                    await dataManager.loadAllData(
+                        partyId: partyId,
+                        currentUserId: currentUserId,
+                        attendeesCount: partyManager.partySize
+                    )
+                    print("✅ PartyHubView: onAppear load completed for party \(partyId)")
                 }
             } else {
                 print("❌ PartyHubView: PartyManager not loaded - isLoaded: \(partyManager.isLoaded)")
+            }
+        }
+        .onChange(of: sessionManager.userProfile?.id ?? "") { newId in
+            // If user id becomes available later, refresh attendees so isCurrentUser flags are accurate
+            guard partyManager.isLoaded else { return }
+            print("🔄 PartyHubView: Detected userId change -> \(newId.isEmpty ? "<empty>" : newId). Reloading attendees.")
+            Task {
+                await dataManager.loadAttendees(partyId: partyId, currentUserId: newId)
             }
         }
         .onDisappear {
@@ -766,6 +770,32 @@ struct PartyHubView: View {
         // Hide loading state
         dataManager.isLoading = false
     }
+    
+    // MARK: - Status pill helpers (match dashboard semantics)
+    private func statusPillText() -> String? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let now = Date()
+        
+        let start = partyManager.startDate
+        let end = partyManager.endDate
+        
+        if start <= now && end >= now {
+            return "LIVE"
+        } else if start > now {
+            let days = Calendar.current.dateComponents([.day], from: now, to: start).day ?? 0
+            if days == 0 { return "Today" }
+            if days == 1 { return "1 day" }
+            return "\(days) days"
+        } else {
+            let days = Calendar.current.dateComponents([.day], from: end, to: now).day ?? 0
+            if days == 0 { return "Yesterday" }
+            if days == 1 { return "1 day ago" }
+            return "\(days) days ago"
+        }
+    }
+    
+    private func getStatusBackgroundColor() -> Color { Color(hex: "#353E3E") }
 }
 
 // MARK: - Feature Preview Card Component

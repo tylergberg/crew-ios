@@ -137,39 +137,9 @@ struct CompactAvatarView: View {
 
 #Preview {
     VStack(spacing: 20) {
-        AvatarView(
-            attendee: PartyAttendee(
-                id: UUID(),
-                userId: "1",
-                partyId: "1",
-                fullName: "John Doe",
-                email: "john@example.com",
-                avatarUrl: nil,
-                role: .guest,
-                rsvpStatus: .confirmed,
-                specialRole: nil,
-                invitedAt: Date(),
-                respondedAt: Date(),
-                isCurrentUser: false
-            )
-        )
+        AvatarView(attendee: PartyAttendee(fullName: "John Doe"))
         
-        CompactAvatarView(
-            attendee: PartyAttendee(
-                id: UUID(),
-                userId: "2",
-                partyId: "1",
-                fullName: "Jane Smith",
-                email: "jane@example.com",
-                avatarUrl: nil,
-                role: .guest,
-                rsvpStatus: .confirmed,
-                specialRole: nil,
-                invitedAt: Date(),
-                respondedAt: Date(),
-                isCurrentUser: false
-            )
-        )
+        CompactAvatarView(attendee: PartyAttendee(fullName: "Jane Smith"))
     }
 }
 

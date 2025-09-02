@@ -366,12 +366,8 @@ struct UnifiedProfileView: View {
                         respondedAt: nil,
                         isCurrentUser: isOwnProfile
                     ),
-                    crewService: crewService ?? CrewService(),
-                    onRsvpChanged: {
-                        // Refresh crew data and dismiss
-                        onCrewDataUpdated?()
-                        dismiss()
-                    }
+                    onChange: { _ in onCrewDataUpdated?(); dismiss() },
+                    onDismiss: { dismiss() }
                 )
             }
         }
@@ -392,12 +388,8 @@ struct UnifiedProfileView: View {
                         respondedAt: nil,
                         isCurrentUser: isOwnProfile
                     ),
-                    crewService: crewService ?? CrewService(),
-                    onRoleChanged: {
-                        // Refresh crew data and dismiss
-                        onCrewDataUpdated?()
-                        dismiss()
-                    }
+                    onChange: { _ in onCrewDataUpdated?(); dismiss() },
+                    onDismiss: { dismiss() }
                 )
             }
         }
@@ -1123,9 +1115,11 @@ class UnifiedProfileViewModel: ObservableObject {
                 let client = SupabaseManager.shared.client
                 
                 // Convert userId string to UUID for proper database comparison
+                print("👤 UnifiedProfileViewModel.loadProfile starting for userId: \(userId)")
                 guard let userIdUUID = UUID(uuidString: userId) else {
                     throw NSError(domain: "ProfileError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid user ID format"])
                 }
+                print("👤 UnifiedProfileViewModel.loadProfile parsed UUID: \(userIdUUID)")
                 
                 let response: PostgrestResponse<ProfileResponse> = try await client
                     .from("profiles")
@@ -1136,10 +1130,12 @@ class UnifiedProfileViewModel: ObservableObject {
 
                 self.profile = response.value
                 self.isLoading = false
+                print("👤 UnifiedProfileViewModel.loadProfile loaded profile for id: \(response.value.id ?? "<nil>") name: \(response.value.full_name ?? "<nil>")")
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.showError = true
                 self.isLoading = false
+                print("❌ UnifiedProfileViewModel.loadProfile error: \(error)")
             }
         }
     }
