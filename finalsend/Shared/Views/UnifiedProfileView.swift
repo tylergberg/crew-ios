@@ -366,7 +366,16 @@ struct UnifiedProfileView: View {
                         respondedAt: nil,
                         isCurrentUser: isOwnProfile
                     ),
-                    onChange: { _ in onCrewDataUpdated?(); dismiss() },
+                    onChange: { newStatus in
+                        Task {
+                            let success = await (crewService ?? CrewService()).updateRsvpStatus(for: partyContext.attendeeId, to: newStatus)
+                            if success {
+                                NotificationCenter.default.post(name: .refreshPartyData, object: nil)
+                                onCrewDataUpdated?()
+                            }
+                            dismiss()
+                        }
+                    },
                     onDismiss: { dismiss() }
                 )
             }

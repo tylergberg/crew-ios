@@ -41,9 +41,9 @@ class PartyDataManager: ObservableObject {
     private var hasLoadedAttendees = false
     
     // MARK: - Centralized Attendee Loading
-    func loadAttendees(partyId: String, currentUserId: String) async {
-        // Skip if already loaded for this party
-        if hasLoadedAttendees && currentPartyId == partyId {
+    func loadAttendees(partyId: String, currentUserId: String, force: Bool = false) async {
+        // Skip if already loaded for this party, unless forced
+        if hasLoadedAttendees && currentPartyId == partyId && !force {
             AppLogger.debug("PartyDataManager: Attendees already loaded for party \(partyId), skipping reload")
             return
         }
@@ -387,6 +387,7 @@ struct PartyHubView: View {
     @State private var showVendorsModal = false
     @State private var showShopModal = false
     @State private var showCrewModal = false
+    @State private var rsvpAttendee: PartyAttendee?
 
     @State private var chatAttendees: [ChatUserSummary] = []
     
@@ -450,6 +451,29 @@ struct PartyHubView: View {
                     icon: "person.3.fill",
                     color: .brandBlue,
                     action: { showCrewModal = true }
+                )
+                // RSVP (summary row)
+                FeaturePreviewCard(
+                    title: "RSVP",
+                    subtitle: {
+                        if let me = dataManager.attendees.first(where: { $0.isCurrentUser }) {
+                            return me.rsvpStatus.displayName
+                        } else if let userId = sessionManager.userProfile?.id,
+                                  let me = dataManager.attendees.first(where: { $0.userId.lowercased() == userId.lowercased() }) {
+                            return me.rsvpStatus.displayName
+                        }
+                        return "Pending"
+                    }(),
+                    icon: "envelope.fill",
+                    color: .brandBlue,
+                    action: {
+                        if let me = dataManager.attendees.first(where: { $0.isCurrentUser }) {
+                            rsvpAttendee = me
+                        } else if let userId = sessionManager.userProfile?.id,
+                                  let me = dataManager.attendees.first(where: { $0.userId.lowercased() == userId.lowercased() }) {
+                            rsvpAttendee = me
+                        }
+                    }
                 )
                 
                 // Party Type (summary row)
@@ -678,6 +702,21 @@ struct PartyHubView: View {
         .fullScreenCover(isPresented: $showShopModal) {
             ShopTabView(
                 userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role.rawValue ?? "attendee"
+            )
+        }
+        .sheet(item: $rsvpAttendee) { me in
+            ChangeRsvpModal(
+                attendee: me,
+                onChange: { newStatus in
+                    Task {
+                        let success = await CrewService().updateRsvpStatus(for: me.id, to: newStatus)
+                        if success {
+                            NotificationCenter.default.post(name: .refreshPartyData, object: nil)
+                        }
+                        rsvpAttendee = nil
+                    }
+                },
+                onDismiss: { rsvpAttendee = nil }
             )
         }
         .fullScreenCover(isPresented: $showCrewModal) {
