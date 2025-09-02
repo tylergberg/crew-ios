@@ -143,13 +143,70 @@ struct EditLocationSheet: View {
         }
         .onAppear {
             // Initialize with current location if available
-            if let cityId = partyManager.cityId {
-                searchQuery = partyManager.location
+            if let cityId = partyManager.cityId, !partyManager.location.isEmpty {
+                print("🔍 [EditLocationSheet] Loading current city: '\(partyManager.location)' (cityId: \(cityId))")
+                
+                // Load current city directly and popular cities
+                Task {
+                    await loadCurrentCityAndPopularCities()
+                }
+            } else {
+                print("⚠️ [EditLocationSheet] No current location set, loading popular cities")
+                // Load some popular cities if no current location
+                Task {
+                    await performCitySearch(query: "")
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentCityAndPopularCities() async {
+        guard let currentCityId = partyManager.cityId else { return }
+        
+        isLoading = true
+        
+        do {
+            // Load the current city by ID first
+            let currentCity = try await citySearchService.getCityById(currentCityId)
+            
+            // Load some popular cities for the list
+            let popularCities = try await citySearchService.getPopularCities()
+            
+            await MainActor.run {
+                // Combine current city with popular cities, ensuring current city is first
+                var allCities: [CityModel] = []
+                
+                if let current = currentCity {
+                    allCities.append(current)
+                    selectedCity = current
+                    print("✅ [EditLocationSheet] Loaded and selected current city: \(current.displayName)")
+                }
+                
+                // Add popular cities that aren't the current city
+                let otherCities = popularCities.filter { $0.id != currentCityId }
+                allCities.append(contentsOf: Array(otherCities.prefix(10)))
+                
+                availableCities = allCities
+                isLoading = false
             }
             
-            // Load some initial cities
-            Task {
-                await performCitySearch(query: "")
+        } catch {
+            print("❌ [EditLocationSheet] Error loading current city: \(error)")
+            // Fallback to popular cities
+            await performCitySearch(query: "")
+        }
+    }
+    
+    private func loadAndSelectCurrentCity() async {
+        guard let currentCityId = partyManager.cityId else { return }
+        
+        // Find the current city in the available cities and select it
+        await MainActor.run {
+            if let currentCity = availableCities.first(where: { $0.id == currentCityId }) {
+                selectedCity = currentCity
+                print("✅ [EditLocationSheet] Pre-selected current city: \(currentCity.displayName)")
+            } else {
+                print("⚠️ [EditLocationSheet] Current city not found in search results, cityId: \(currentCityId)")
             }
         }
     }
@@ -161,7 +218,8 @@ struct EditLocationSheet: View {
             let cities: [CityModel]
             if query.isEmpty {
                 // Show some popular cities for empty query
-                cities = try await citySearchService.searchCities(query: "New York")
+                print("🔍 [EditLocationSheet] Loading popular cities for empty query")
+                cities = try await citySearchService.searchCities(query: "Los Angeles") // Use LA as more neutral default
                 // Limit to first 10 for initial display
                 let limitedCities = Array(cities.prefix(10))
                 await MainActor.run {

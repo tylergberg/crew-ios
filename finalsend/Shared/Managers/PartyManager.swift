@@ -49,12 +49,33 @@ extension PartyModel {
         // Extract city ID from the city data if available
         print("🔍 PartyModel.init(fromParty:) - party.city?.id: \(party.city?.id ?? "nil")")
         print("🔍 PartyModel.init(fromParty:) - party.city?.displayName: \(party.city?.displayName ?? "nil")")
+        print("🔍 PartyModel.init(fromParty:) - party.city?.timezone: \(party.city?.timezone ?? "nil")")
         
         // Set city_id directly from the city data
         self.city_id = party.city?.id
         print("🔍 PartyModel.init(fromParty:) - Set city_id: \(self.city_id ?? "nil")")
         
-        self.cities = nil
+        // Map city data including timezone instead of setting to nil
+        if let partyCity = party.city,
+           let cityId = partyCity.id,
+           let cityUUID = UUID(uuidString: cityId),
+           let cityName = partyCity.city,
+           let countryName = partyCity.country,
+           let timezoneString = partyCity.timezone {
+            self.cities = CityModel(
+                id: cityUUID,
+                city: cityName,
+                stateOrProvince: partyCity.state_or_province,
+                country: countryName,
+                timezone: timezoneString,
+                latitude: nil,
+                longitude: nil
+            )
+            print("🔍 PartyModel.init(fromParty:) - Mapped cities with timezone: \(timezoneString)")
+        } else {
+            self.cities = nil
+            print("🔍 PartyModel.init(fromParty:) - Missing required city data, setting cities to nil")
+        }
         self.party_size = nil
         self.social_links = nil
         self.cover_image_url = party.coverImageURL
@@ -120,7 +141,13 @@ class PartyManager: ObservableObject {
         self.startDate = data.start_date ?? Date()
         self.endDate = data.end_date ?? Date()
         self.location = data.location ?? ""
-        self.timezone = data.cities?.timezone ?? "America/New_York"
+        if let cityTimezone = data.cities?.timezone, !cityTimezone.isEmpty {
+            self.timezone = cityTimezone
+            print("✅ [PartyManager.load] Using city timezone: \(cityTimezone)")
+        } else {
+            self.timezone = "America/New_York"
+            print("⚠️ [PartyManager.load] No city timezone found (data.cities?.timezone: '\(data.cities?.timezone ?? "nil")'), falling back to America/New_York")
+        }
         self.partyType = data.party_type ?? ""
         self.vibeTags = data.party_vibe_tags ?? []
         
