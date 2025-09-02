@@ -8,10 +8,11 @@ extension Notification.Name {
 
 enum PartyTab: String, CaseIterable {
     case upcoming = "Upcoming"
+    case pending = "Pending Invites"
+    case declined = "Declined Invites"
     case inprogress = "Live Trips"
-    case past = "Past Trips"
-    case declined = "Declined"
-    case pending = "Pending"
+    case attended = "Attended Trips"
+    case didntgo = "Didn't Go"
 }
 
 struct PartyCity: Decodable {
@@ -425,26 +426,58 @@ struct DashboardView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         
-        var counts: [PartyTab: Int] = [.upcoming: 0, .inprogress: 0, .past: 0]
+        var counts: [PartyTab: Int] = [
+            .upcoming: 0,
+            .pending: 0,
+            .declined: 0,
+            .inprogress: 0,
+            .attended: 0,
+            .didntgo: 0
+        ]
         
         for party in parties {
-            guard let start = party.startDate.flatMap({ formatter.date(from: $0) }),
-                  let end = party.endDate.flatMap({ formatter.date(from: $0) }) else {
-                // If no dates are set, count as upcoming
+            let start = party.startDate.flatMap { formatter.date(from: $0) }
+            let end = party.endDate.flatMap { formatter.date(from: $0) }
+
+            let currentUserHasDeclined = party.attendees?.contains { attendee in
+                attendee.isCurrentUser && attendee.status == "declined"
+            } ?? false
+            let currentUserHasPending = party.attendees?.contains { attendee in
+                attendee.isCurrentUser && attendee.status == "pending"
+            } ?? false
+
+            if currentUserHasDeclined {
+                if let end = end, end < now {
+                    counts[.didntgo]? += 1
+                } else {
+                    counts[.declined]? += 1
+                }
+                continue
+            }
+            if currentUserHasPending {
+                if let end = end, end < now {
+                    counts[.didntgo]? += 1
+                } else {
+                    counts[.pending]? += 1
+                }
+                continue
+            }
+
+            guard let start = start, let end = end else {
                 counts[.upcoming]? += 1
                 continue
             }
-            
+
             if start > now {
                 counts[.upcoming]? += 1
             } else if start <= now && end >= now {
                 counts[.inprogress]? += 1
             } else {
-                counts[.past]? += 1
+                counts[.attended]? += 1
             }
         }
         
-        print("🔍 sendPartyCounts: Sending counts - upcoming: \(counts[.upcoming] ?? 0), inprogress: \(counts[.inprogress] ?? 0), past: \(counts[.past] ?? 0)")
+        print("🔍 sendPartyCounts: \(counts)")
         
         // Send the counts to MainTabView
         NotificationCenter.default.post(
@@ -460,55 +493,53 @@ struct DashboardView: View {
         formatter.dateFormat = "yyyy-MM-dd"
 
         return parties.filter { party in
-            // Handle parties without dates - show them in upcoming tab
-            guard let start = party.startDate.flatMap({ formatter.date(from: $0) }),
-                  let end = party.endDate.flatMap({ formatter.date(from: $0) }) else {
-                // If no dates are set, show in upcoming tab
-                return selectedTab == .upcoming
+            let start = party.startDate.flatMap { formatter.date(from: $0) }
+            let end = party.endDate.flatMap { formatter.date(from: $0) }
+
+            let currentUserHasDeclined = party.attendees?.contains { attendee in
+                attendee.isCurrentUser && attendee.status == "declined"
+            } ?? false
+            let currentUserHasPending = party.attendees?.contains { attendee in
+                attendee.isCurrentUser && attendee.status == "pending"
+            } ?? false
+
+            // No dates → only show in Upcoming (confirmed)
+            guard let start = start, let end = end else {
+                return selectedTab == .upcoming && !(currentUserHasDeclined || currentUserHasPending)
             }
+
+            let isFuture = start > now
+            let isInProgress = start <= now && end >= now
+            let isPast = end < now
 
             switch selectedTab {
             case .upcoming:
-                return start > now
-            case .inprogress:
-                return start <= now && end >= now
-            case .past:
-                return end < now
-            case .declined:
-                return false // Declined parties are handled separately
+                return isFuture && !(currentUserHasDeclined || currentUserHasPending)
             case .pending:
-                return false // Pending parties are handled separately
+                return isFuture && currentUserHasPending
+            case .declined:
+                return isFuture && currentUserHasDeclined
+            case .inprogress:
+                return isInProgress && !(currentUserHasDeclined || currentUserHasPending)
+            case .attended:
+                return isPast && !(currentUserHasDeclined || currentUserHasPending)
+            case .didntgo:
+                return isPast && (currentUserHasDeclined || currentUserHasPending)
             }
         }
-        .sorted { lhs, rhs in
+        .sorted { (lhs: Party, rhs: Party) -> Bool in
             let lhsStart = lhs.startDate.flatMap { formatter.date(from: $0) }
             let rhsStart = rhs.startDate.flatMap { formatter.date(from: $0) }
             let lhsEnd = lhs.endDate.flatMap { formatter.date(from: $0) }
             let rhsEnd = rhs.endDate.flatMap { formatter.date(from: $0) }
 
             switch selectedTab {
-            case .upcoming:
-                // Sort parties without dates to the end, then by start date
-                if lhsStart == nil && rhsStart != nil {
-                    return false
-                } else if lhsStart != nil && rhsStart == nil {
-                    return true
-                } else if lhsStart == nil && rhsStart == nil {
-                    // Both have no dates, sort by name
-                    return lhs.name < rhs.name
-                } else {
-                    return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
-                }
-            case .inprogress:
-                return (lhsEnd ?? .distantFuture) < (rhsEnd ?? .distantFuture)
-            case .past:
+            case .upcoming, .pending, .declined:
+                // Start date ascending; undated at end for Upcoming case
+                return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
+            case .inprogress, .attended, .didntgo:
+                // End date descending (most recent first)
                 return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
-            case .declined:
-                // Sort declined parties by name since they're not time-sensitive
-                return lhs.name < rhs.name
-            case .pending:
-                // Sort pending parties by name since they're not time-sensitive
-                return lhs.name < rhs.name
             }
         }
     }

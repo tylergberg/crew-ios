@@ -7,7 +7,14 @@ struct MainTabView: View {
     @State private var shouldShowUI = false
     @State private var partiesLoaded = false
     @State private var hasCheckedForInProgressOnLaunch = false
-    @State private var partyCounts: [PartyTab: Int] = [.upcoming: 0, .inprogress: 0, .past: 0, .declined: 0, .pending: 0]
+    @State private var partyCounts: [PartyTab: Int] = [
+        .upcoming: 0,
+        .pending: 0,
+        .declined: 0,
+        .inprogress: 0,
+        .attended: 0,
+        .didntgo: 0
+    ]
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var appNavigator: AppNavigator
     @State private var currentUserId: String? = nil
@@ -225,7 +232,7 @@ struct MainTabView: View {
     }
     
     private var availableTabs: [PartyTab] {
-        return [.upcoming, .inprogress, .past, .declined, .pending]
+        return [.upcoming, .pending, .declined, .inprogress, .attended, .didntgo]
     }
     
     private func loadUnreadTaskCount() async {

@@ -8,7 +8,7 @@ struct PartyModel: Codable {
     let party_type: String?
     let party_vibe_tags: [String]?
     let created_by: UUID?
-    let city_id: UUID?
+    let city_id: String?
     let cities: CityModel? // <- Added
     let party_size: Int?
     let social_links: [String]?
@@ -45,7 +45,15 @@ extension PartyModel {
         self.party_type = party.partyType
         self.party_vibe_tags = party.vibeTags
         self.created_by = nil
-        self.city_id = nil
+        
+        // Extract city ID from the city data if available
+        print("🔍 PartyModel.init(fromParty:) - party.city?.id: \(party.city?.id ?? "nil")")
+        print("🔍 PartyModel.init(fromParty:) - party.city?.displayName: \(party.city?.displayName ?? "nil")")
+        
+        // Set city_id directly from the city data
+        self.city_id = party.city?.id
+        print("🔍 PartyModel.init(fromParty:) - Set city_id: \(self.city_id ?? "nil")")
+        
         self.cities = nil
         self.party_size = nil
         self.social_links = nil
@@ -115,7 +123,15 @@ class PartyManager: ObservableObject {
         self.timezone = data.cities?.timezone ?? "America/New_York"
         self.partyType = data.party_type ?? ""
         self.vibeTags = data.party_vibe_tags ?? []
-        self.cityId = data.city_id
+        
+        // Set cityId from the data
+        if let cityIdString = data.city_id {
+            self.cityId = UUID(uuidString: cityIdString)
+            print("🔍 PartyManager.load() - Set cityId: \(self.cityId?.uuidString ?? "nil")")
+        } else {
+            self.cityId = nil
+            print("🔍 PartyManager.load() - No city_id in data")
+        }
         self.partySize = data.party_size ?? 0
         self.socialLinks = data.social_links ?? []
         self.coverImageURL = data.cover_image_url
@@ -135,6 +151,11 @@ class PartyManager: ObservableObject {
         let theme = PartyTheme.allThemes.first { $0.id == themeId } ?? .default
         print("🔍 PartyManager.currentTheme - themeId: \(themeId), found theme: \(theme.id)")
         return theme
+    }
+    
+    func updateTheme(_ theme: PartyTheme) {
+        self.themeId = theme.id
+        print("🔍 PartyManager.updateTheme - Updated themeId to: \(themeId)")
     }
     
     var userRole: UserRole? {

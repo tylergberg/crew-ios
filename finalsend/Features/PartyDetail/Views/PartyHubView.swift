@@ -387,6 +387,10 @@ struct PartyHubView: View {
     @State private var showVendorsModal = false
     @State private var showShopModal = false
     @State private var showCrewModal = false
+    @State private var showThemeModal = false
+    @State private var showEditPartyTypeModal = false
+    @State private var showEditDatesModal = false
+    @State private var showEditLocationModal = false
     @State private var rsvpAttendee: PartyAttendee?
 
     @State private var chatAttendees: [ChatUserSummary] = []
@@ -449,7 +453,7 @@ struct PartyHubView: View {
                     title: "Crew",
                     subtitle: dataManager.isAttendeesLoading ? "Loading attendees…" : (dataManager.attendees.isEmpty ? "No attendees yet" : "\(dataManager.attendees.count) attendees"),
                     icon: "person.3.fill",
-                    color: .brandBlue,
+                    color: Color.brandBlue,
                     action: { showCrewModal = true }
                 )
                 // RSVP (summary row)
@@ -465,7 +469,7 @@ struct PartyHubView: View {
                         return "Pending"
                     }(),
                     icon: "envelope.fill",
-                    color: .brandBlue,
+                    color: Color.brandBlue,
                     action: {
                         if let me = dataManager.attendees.first(where: { $0.isCurrentUser }) {
                             rsvpAttendee = me
@@ -481,31 +485,62 @@ struct PartyHubView: View {
                     title: "Party Type",
                     subtitle: partyManager.partyType.isEmpty ? "Not specified" : partyManager.partyType,
                     icon: "tag.fill",
-                    color: .brandBlue,
-                    action: {}
+                    color: Color.brandBlue,
+                    action: { showEditPartyTypeModal = true }
                 )
                 
                 // Dates (summary row)
                 FeaturePreviewCard(
                     title: "Dates",
                     subtitle: {
-                        let f = DateFormatter()
-                        f.dateStyle = .medium
-                        f.timeStyle = .none
-                        return "Start: \(f.string(from: partyManager.startDate)) – End: \(f.string(from: partyManager.endDate))"
+                        let calendar = Calendar.current
+                        let start = partyManager.startDate
+                        let end = partyManager.endDate
+                        let startFormatter = DateFormatter()
+                        let endFormatter = DateFormatter()
+                        startFormatter.dateFormat = "MMM d"
+                        let startString = startFormatter.string(from: start)
+                        if calendar.component(.year, from: start) == calendar.component(.year, from: end) {
+                            endFormatter.dateFormat = "MMM d, yyyy"
+                            let endString = endFormatter.string(from: end)
+                            return "\(startString) - \(endString)"
+                        } else {
+                            startFormatter.dateFormat = "MMM d, yyyy"
+                            endFormatter.dateFormat = "MMM d, yyyy"
+                            let startFull = startFormatter.string(from: start)
+                            let endFull = endFormatter.string(from: end)
+                            return "\(startFull) - \(endFull)"
+                        }
                     }(),
                     icon: "calendar",
-                    color: .brandBlue,
-                    action: {}
+                    color: Color.brandBlue,
+                    action: { showEditDatesModal = true }
                 )
                 
                 // Feature placeholders – flat list
                 FeaturePreviewCard(
                     title: "Location",
-                    subtitle: "Set destination & city",
+                    subtitle: {
+                        // Debug logging
+                        print("🔍 Location Card Debug:")
+                        print("  - cityId: \(partyManager.cityId?.uuidString ?? "nil")")
+                        print("  - location: '\(partyManager.location)'")
+                        print("  - location.isEmpty: \(partyManager.location.isEmpty)")
+                        print("  - location == 'Unknown': \(partyManager.location == "Unknown")")
+                        
+                        // Check if we have a real location set (has cityId and location is not empty)
+                        if let cityId = partyManager.cityId,
+                           !partyManager.location.isEmpty && partyManager.location != "Unknown" {
+                            print("  - ✅ Showing location: \(partyManager.location)")
+                            return partyManager.location
+                        } else {
+                            print("  - ❌ Showing placeholder: Set destination & city")
+                            return "Set destination & city"
+                        }
+                    }(),
                     icon: "mappin.and.ellipse",
-                    color: .brandBlue,
-                    action: {}
+                    color: Color.brandBlue,
+                    action: { showEditLocationModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Vibe",
@@ -513,6 +548,14 @@ struct PartyHubView: View {
                     icon: "sparkles",
                     color: .purple,
                     action: {}
+                )
+                
+                FeaturePreviewCard(
+                    title: "Party Theme",
+                    subtitle: "Customize colors & style",
+                    icon: "paintbrush.fill",
+                    color: .indigo,
+                    action: { showThemeModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Itinerary",
@@ -581,7 +624,7 @@ struct PartyHubView: View {
                     title: "Chat",
                     subtitle: "Group messages",
                     icon: "message",
-                    color: .brandBlue,
+                    color: Color.brandBlue,
                     action: { showChatModal = true }
                 )
                 
@@ -591,7 +634,7 @@ struct PartyHubView: View {
                         HStack {
                             Image(systemName: "envelope")
                                 .font(.title3)
-                                .foregroundColor(.brandBlue)
+                                .foregroundColor(Color.brandBlue)
                                 .frame(width: 24)
                             
                             Text("RSVP")
@@ -728,6 +771,37 @@ struct PartyHubView: View {
                 )
                 .environmentObject(dataManager)
             }
+        }
+        .fullScreenCover(isPresented: $showThemeModal) {
+            PartyThemeView(currentTheme: partyManager.currentTheme)
+                .environmentObject(partyManager)
+        }
+        .sheet(isPresented: $showEditPartyTypeModal) {
+            EditPartyTypeSheet(onSaved: {
+                // Refresh party data after updating party type
+                Task {
+                    await dataManager.refreshData()
+                }
+            })
+            .environmentObject(partyManager)
+        }
+
+        .sheet(isPresented: $showEditDatesModal) {
+            EditPartyDatesSheet(onSaved: {
+                Task {
+                    await dataManager.refreshData()
+                }
+            })
+            .environmentObject(partyManager)
+        }
+        
+        .sheet(isPresented: $showEditLocationModal) {
+            EditLocationSheet(onSaved: {
+                Task {
+                    await dataManager.refreshData()
+                }
+            })
+            .environmentObject(partyManager)
         }
 
 
