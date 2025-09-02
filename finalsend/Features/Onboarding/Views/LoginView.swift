@@ -9,13 +9,8 @@ import Foundation
 import SwiftUI
 import Supabase
 
-let supabase = SupabaseClient(
-    supabaseURL: URL(string: "https://gyjxjigtihqzepotegjy.supabase.co")!,
-    supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5anhqaWd0aWhxemVwb3RlZ2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyMzEwOTgsImV4cCI6MjA1NzgwNzA5OH0.3HQ7kvYmg7rPfyF8kB8pJe3iaMJ9sYigl8KGN3Q1rYo"
-)
-
 struct LoginView: View {
-    @AppStorage("isLoggedIn") var isLoggedIn: Bool = false
+    @StateObject private var authManager = AuthManager.shared
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
@@ -27,38 +22,58 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#9BC8EE")!.ignoresSafeArea()
+            Color.neutralBackground.ignoresSafeArea()
 
             VStack(spacing: 32) {
                 Spacer()
 
-                Image("finalsendLogo")
+                Image("crew-wordmark")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 120, height: 120)
 
                 Text("Login")
-                    .font(.system(size: 28, weight: .bold, design: .serif))
-                    .foregroundColor(Color(hex: "#401B17")!)
+                    .font(.title2.weight(.bold))
+                    .foregroundColor(.titleDark)
+                
+                // Show message if there's a pending invite
+                if UserDefaults.standard.string(forKey: "pending_invite_token") != nil {
+                    Text("🎉 You're joining a party!")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.brandBlue)
+                        .cornerRadius(20)
+                }
 
                 VStack(spacing: 16) {
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
                         .textContentType(.emailAddress)
                         .textInputAutocapitalization(.never)
-                        .foregroundColor(.black)
+                        .disableAutocorrection(true)
+                        .autocorrectionDisabled(true)
+                        .foregroundColor(.titleDark)
                         .padding()
                         .background(Color.white)
-                        .cornerRadius(14)
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black, lineWidth: 2))
+                        .cornerRadius(Radius.button)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.button)
+                                .stroke(Color.outlineBlack.opacity(0.1), lineWidth: 1)
+                        )
                         .focused($focusedField, equals: .email)
 
                     SecureField("Password", text: $password)
-                        .foregroundColor(.black)
+                        .foregroundColor(.titleDark)
                         .padding()
                         .background(Color.white)
-                        .cornerRadius(14)
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black, lineWidth: 2))
+                        .cornerRadius(Radius.button)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.button)
+                                .stroke(Color.outlineBlack.opacity(0.1), lineWidth: 1)
+                        )
                         .focused($focusedField, equals: .password)
 
                     HStack {
@@ -66,8 +81,8 @@ struct LoginView: View {
                         Button("Forgot password?") {
                             print("Navigate to reset password")
                         }
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#4A81E8")!)
+                        .font(.footnote)
+                        .foregroundColor(.brandBlue)
                     }
                 }
                 .padding(.horizontal)
@@ -76,15 +91,25 @@ struct LoginView: View {
                     isLoading = true
                     Task {
                         do {
-                            let session = try await supabase.auth.signIn(
+                            let client = SupabaseManager.shared.client
+                            let session = try await client.auth.signIn(
                                 email: email,
                                 password: password
                             )
                             print("Login successful: \(session)")
-                            DispatchQueue.main.async {
-                                isLoggedIn = true
+                            
+                            // Persist session to Keychain
+                            try await authManager.persistCurrentSession()
+                            
+                            // Check if there's a pending invite to process
+                            if let partyId = await authManager.acceptPendingInviteIfAny() {
+                                print("✅ Invite accepted after login, navigating to party: \(partyId)")
+                                AppNavigator.shared.navigateToParty(partyId)
+                            } else {
+                                print("🔍 No pending invite, navigating to dashboard")
+                                AppNavigator.shared.navigateToDashboard()
                             }
-                            // TODO: Navigate to dashboard or store session
+                            
                         } catch {
                             print("Login failed: \(error.localizedDescription)")
                         }
@@ -93,35 +118,34 @@ struct LoginView: View {
                 }) {
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     } else {
                         Text("LOGIN")
-                            .font(.system(size: 18, weight: .bold, design: .serif))
-                            .foregroundColor(Color(hex: "#401B17")!)
+                            .font(Typography.button().weight(.bold))
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
-                            .background(Color(hex: "#F9C94E")!)
-                            .cornerRadius(18)
-                            .shadow(color: .black, radius: 0, x: 4, y: 4)
+                            .background(Color(hex: "#353E3E"))
+                            .cornerRadius(Radius.button)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Radius.button)
+                                    .stroke(Color.outlineBlack, lineWidth: 1.5)
+                            )
+                            .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
                     }
                 }
                 .disabled(isLoading)
                 .padding(.horizontal)
 
                 Spacer()
-
-                Button(action: {
-                    print("Navigate to SignupView")
-                }) {
-                    Text("Don't have an account? Join Now")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color(hex: "#401B17")!)
-                        .underline()
-                }
-
-                Spacer()
             }
             .padding()
+        }
+        .onAppear {
+            // Prefill email if available from Universal Link
+            if let lastEmail = authManager.lastEmail {
+                email = lastEmail
+            }
         }
     }
 }
