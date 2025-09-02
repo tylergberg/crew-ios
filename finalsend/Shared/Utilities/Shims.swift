@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Supabase
 
 // MARK: - Feature Shims (compile-time placeholders)
 
@@ -14,9 +15,119 @@ final class TasksStore: ObservableObject {
 final class VendorService {
     func fetchVendors(cityId: UUID) async throws -> [String] { [] }
 }
-final class ItineraryService {
-    var events: [ItineraryEvent] = []
-    func fetchEvents(for partyId: String) async {}
+@MainActor
+final class ItineraryService: ObservableObject {
+    @Published var events: [ItineraryEvent] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let supabase: SupabaseClient
+    
+    init(supabase: SupabaseClient) {
+        self.supabase = supabase
+    }
+    
+    func fetchEvents(for partyId: String) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let response: [ItineraryEvent] = try await supabase
+                .from("itinerary_events")
+                .select()
+                .eq("party_id", value: partyId)
+                .order("start_time", ascending: true)
+                .execute()
+                .value
+            
+            await MainActor.run {
+                events = response
+            }
+            AppLogger.success("ItineraryService: Loaded \(events.count) events for party \(partyId)")
+        } catch {
+            AppLogger.error("ItineraryService: Error fetching events: \(error)")
+            errorMessage = "Failed to load events: \(error.localizedDescription)"
+        }
+        
+        isLoading = false
+    }
+    
+    func addEvent(_ event: ItineraryEvent) async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let response: ItineraryEvent = try await supabase
+                .from("itinerary_events")
+                .insert(event)
+                .select()
+                .single()
+                .execute()
+                .value
+            
+            events.append(response)
+            AppLogger.success("ItineraryService: Added event \(response.title)")
+        } catch {
+            AppLogger.error("ItineraryService: Error adding event: \(error)")
+            errorMessage = "Failed to add event: \(error.localizedDescription)"
+            throw error
+        }
+        
+        isLoading = false
+    }
+    
+    func updateEvent(_ event: ItineraryEvent) async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let response: ItineraryEvent = try await supabase
+                .from("itinerary_events")
+                .update(event)
+                .eq("id", value: event.id)
+                .select()
+                .single()
+                .execute()
+                .value
+            
+            if let index = events.firstIndex(where: { $0.id == event.id }) {
+                events[index] = response
+            }
+            AppLogger.success("ItineraryService: Updated event \(response.title)")
+        } catch {
+            AppLogger.error("ItineraryService: Error updating event: \(error)")
+            errorMessage = "Failed to update event: \(error.localizedDescription)"
+            throw error
+        }
+        
+        isLoading = false
+    }
+    
+    func deleteEvent(_ eventId: UUID) async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await supabase
+                .from("itinerary_events")
+                .delete()
+                .eq("id", value: eventId)
+                .execute()
+            
+            events.removeAll { $0.id == eventId }
+            AppLogger.success("ItineraryService: Deleted event \(eventId)")
+        } catch {
+            AppLogger.error("ItineraryService: Error deleting event: \(error)")
+            errorMessage = "Failed to delete event: \(error.localizedDescription)"
+            throw error
+        }
+        
+        isLoading = false
+    }
+    
+    func refreshEvents(for partyId: String) async {
+        await fetchEvents(for: partyId)
+    }
 }
 final class FlightsService {
     init(supabase: Any? = nil) {}
@@ -55,7 +166,15 @@ struct TransportTabView: View {
 struct ItineraryView: View {
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var sessionManager: SessionManager
-    var body: some View { Text("Itinerary (placeholder)") }
+    
+    var body: some View {
+        ItineraryTabView(
+            partyId: partyManager.partyId,
+            currentUserId: sessionManager.userProfile?.id ?? "",
+            userRole: partyManager.userRole ?? .attendee,
+            cityTimezone: partyManager.timezone
+        )
+    }
 }
 
 struct VendorsTabView: View {
@@ -64,8 +183,70 @@ struct VendorsTabView: View {
 }
 
 struct ItineraryEvent: Identifiable, Codable, Hashable {
-    let id: UUID = UUID()
-    var startDate: Date? = nil
+    let id: UUID
+    let partyId: UUID
+    let title: String
+    let description: String?
+    let location: String?
+    let locationUrl: String?
+    let imageUrl: String?
+    let createdAt: Date
+    let createdBy: UUID
+    let updatedAt: Date?
+    let cityId: UUID?
+    let startTime: Date?
+    let endTime: Date?
+    let latitude: Double?
+    let longitude: Double?
+    
+    init(
+        id: UUID = UUID(),
+        partyId: UUID,
+        title: String,
+        description: String? = nil,
+        location: String? = nil,
+        locationUrl: String? = nil,
+        imageUrl: String? = nil,
+        createdAt: Date = Date(),
+        createdBy: UUID,
+        updatedAt: Date? = nil,
+        cityId: UUID? = nil,
+        startTime: Date? = nil,
+        endTime: Date? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    ) {
+        self.id = id
+        self.partyId = partyId
+        self.title = title
+        self.description = description
+        self.location = location
+        self.locationUrl = locationUrl
+        self.imageUrl = imageUrl
+        self.createdAt = createdAt
+        self.createdBy = createdBy
+        self.updatedAt = updatedAt
+        self.cityId = cityId
+        self.startTime = startTime
+        self.endTime = endTime
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+    
+    // CodingKeys to handle snake_case from database
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, location
+        case locationUrl = "location_url"
+        case imageUrl = "image_url"
+        case createdAt = "created_at"
+        case createdBy = "created_by"
+        case updatedAt = "updated_at"
+        case cityId = "city_id"
+        case startTime = "start_time"
+        case endTime = "end_time"
+        case partyId = "party_id"
+        case latitude, longitude
+    }
 }
 
 struct CityCore: Codable, Hashable {

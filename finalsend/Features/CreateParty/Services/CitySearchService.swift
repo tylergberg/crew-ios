@@ -97,4 +97,44 @@ class CitySearchService: CitySearchServiceType {
             throw CitySearchError.networkError(error)
         }
     }
+    
+    func getCityById(_ cityId: UUID) async throws -> CityModel? {
+        do {
+            let cities: [CityModel] = try await client
+                .from("cities")
+                .select("id, city, state_or_province, country, timezone")
+                .eq("id", value: cityId.uuidString)
+                .execute()
+                .value
+            
+            return cities.first
+        } catch {
+            print("❌ Error fetching city by ID: \(error)")
+            throw CitySearchError.networkError(error)
+        }
+    }
+    
+    func getPopularCities() async throws -> [CityModel] {
+        do {
+            // Get a mix of popular party cities
+            let popularCityNames = ["Austin", "Las Vegas", "Miami", "Nashville", "Chicago", "New York", "Los Angeles", "Denver", "Phoenix", "Seattle"]
+            var allCities: [CityModel] = []
+            
+            for cityName in popularCityNames.prefix(5) { // Limit to first 5 to avoid too many requests
+                do {
+                    let cities = try await searchCities(query: cityName)
+                    if let firstCity = cities.first {
+                        allCities.append(firstCity)
+                    }
+                } catch {
+                    print("⚠️ Failed to load \(cityName): \(error)")
+                }
+            }
+            
+            return allCities
+        } catch {
+            print("❌ Error loading popular cities: \(error)")
+            throw CitySearchError.networkError(error)
+        }
+    }
 }

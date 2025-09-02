@@ -226,7 +226,7 @@ struct PartiesTabView: View {
                 // Step 2: Fetch party info for those IDs with city data
                 let fetchedParties: [Party] = try await client
                     .from("parties")
-                    .select("id, name, start_date, end_date, cover_image_url, theme_id, party_type, party_vibe_tags, cities(id, city, state_or_province, country)")
+                    .select("id, name, start_date, end_date, cover_image_url, theme_id, party_type, party_vibe_tags, cities(id, city, state_or_province, country, timezone)")
                     .in("id", values: partyIds.map { $0.uuidString })
                     .execute()
                     .value

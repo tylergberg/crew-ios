@@ -191,7 +191,7 @@ class PartyDataManager: ObservableObject {
         self.expensesStore = ExpensesStore(supabase: SupabaseManager.shared.client)
         self.lodgingStore = LodgingStore(supabase: SupabaseManager.shared.client)
         self.vendorService = VendorService()
-        self.itineraryService = ItineraryService()
+        self.itineraryService = ItineraryService(supabase: SupabaseManager.shared.client)
         self.flightsService = FlightsService(supabase: SupabaseManager.shared.client)
         self.gamesService = PartyGamesService.shared
         self.galleryService = GalleryService()
@@ -267,11 +267,11 @@ class PartyDataManager: ObservableObject {
         // Find the next upcoming event
         let now = Date()
         let upcomingEvents = itineraryService?.events.filter { event in
-            guard let startDate = event.startDate else { return false }
-            return startDate > now
+            guard let startTime = event.startTime else { return false }
+            return startTime > now
         }.sorted { first, second in
-            guard let firstDate = first.startDate, let secondDate = second.startDate else { return false }
-            return firstDate < secondDate
+            guard let firstTime = first.startTime, let secondTime = second.startTime else { return false }
+            return firstTime < secondTime
         } ?? []
         
         eventCount = itineraryService?.events.count ?? 0
@@ -567,70 +567,70 @@ struct PartyHubView: View {
                     title: "Party Theme",
                     subtitle: "Customize colors & style",
                     icon: "paintbrush.fill",
-                    color: .indigo,
+                    color: Color.brandBlue,
                     action: { showThemeModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Itinerary",
                     subtitle: "Plan events & schedule",
                     icon: "calendar.badge.clock",
-                    color: .indigo,
+                    color: Color.brandBlue,
                     action: { showItineraryModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Transport",
                     subtitle: "Flights & rides",
                     icon: "car",
-                    color: .teal,
+                    color: Color.brandBlue,
                     action: { showTransportModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Lodging",
                     subtitle: "Stay details & rooms",
                     icon: "house",
-                    color: .orange,
+                    color: Color.brandBlue,
                     action: { showLodgingModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Packing",
                     subtitle: "Shared packing lists",
                     icon: "shippingbox",
-                    color: .orange,
+                    color: Color.brandBlue,
                     action: { showPackingModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Shop",
                     subtitle: "Merch & supplies",
                     icon: "tshirt",
-                    color: .mint,
+                    color: Color.brandBlue,
                     action: { showShopModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Games",
                     subtitle: "Activities & icebreakers",
                     icon: "gamecontroller",
-                    color: .pink,
+                    color: Color.brandBlue,
                     action: { showGamesModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Expenses",
                     subtitle: "Track spending & splits",
                     icon: "dollarsign.circle",
-                    color: .green,
+                    color: Color.brandBlue,
                     action: { showExpensesModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Album",
                     subtitle: "Photos & memories",
                     icon: "photo.on.rectangle",
-                    color: .indigo,
+                    color: Color.brandBlue,
                     action: { showGalleryModal = true }
                 )
                 FeaturePreviewCard(
                     title: "AI Assistant",
                     subtitle: "Plan smarter with AI",
                     icon: "wand.and.stars",
-                    color: .purple,
+                    color: Color.brandBlue,
                     action: {}
                 )
                 FeaturePreviewCard(
@@ -640,45 +640,6 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showChatModal = true }
                 )
-                
-                // RSVP Section
-                if let currentUserAttendee = dataManager.attendees.first(where: { $0.isCurrentUser }) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "envelope")
-                                .font(.title3)
-                                .foregroundColor(Color.brandBlue)
-                                .frame(width: 24)
-                            
-                            Text("RSVP")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.titleDark)
-                            
-                            Spacer()
-                            
-                            Text("Update")
-                            .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.brandBlue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                        }
-                        
-                        Text("Status: \(currentUserAttendee.rsvpStatus.rawValue.capitalized)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(20)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(partyManager.currentTheme.primaryAccentColor.opacity(0.3), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 16) // Add top padding to avoid navigation bar
@@ -724,9 +685,18 @@ struct PartyHubView: View {
             )
         }
         .fullScreenCover(isPresented: $showItineraryModal) {
-            ItineraryView()
-                .environmentObject(partyManager)
-                .environmentObject(sessionManager)
+            NavigationView {
+                ItineraryView()
+                    .environmentObject(partyManager)
+                    .environmentObject(sessionManager)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Done") {
+                                showItineraryModal = false
+                            }
+                        }
+                    }
+            }
         }
         .fullScreenCover(isPresented: $showTasksModal) {
             TasksTabView(

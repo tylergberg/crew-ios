@@ -250,7 +250,31 @@ struct OverviewTabView: View {
                     print("No city available")
                 }
                 
-                partyManager.timezone = result.cities?.timezone ?? "America/New_York"
+                // Handle timezone with better fallback for common cities
+                print("🔍 [OverviewTabView] City data - id: \(result.cities?.id ?? "nil"), name: \(result.cities?.city ?? "nil"), timezone: '\(result.cities?.timezone ?? "nil")'")
+                
+                if let timezone = result.cities?.timezone, !timezone.isEmpty {
+                    partyManager.timezone = timezone
+                    print("✅ [OverviewTabView] Using database timezone: \(timezone)")
+                } else {
+                    // Fallback based on city name for common locations
+                    let cityName = result.cities?.city?.lowercased() ?? ""
+                    let stateName = result.cities?.state_or_province?.lowercased() ?? ""
+                    
+                    if cityName.contains("austin") && stateName.contains("texas") {
+                        partyManager.timezone = "America/Chicago"
+                        print("🔧 [OverviewTabView] Applied Austin timezone fallback: America/Chicago")
+                    } else if cityName.contains("new york") || cityName.contains("nyc") {
+                        partyManager.timezone = "America/New_York"
+                    } else if cityName.contains("los angeles") || cityName.contains("la") && stateName.contains("california") {
+                        partyManager.timezone = "America/Los_Angeles"
+                    } else if cityName.contains("chicago") {
+                        partyManager.timezone = "America/Chicago"
+                    } else {
+                        partyManager.timezone = "America/New_York" // Default fallback
+                        print("⚠️ [OverviewTabView] Using default timezone fallback for \(cityName), \(stateName)")
+                    }
+                }
                 print("Set timezone: \(partyManager.timezone)")
                 
                 partyManager.partyType = result.party_type ?? ""
