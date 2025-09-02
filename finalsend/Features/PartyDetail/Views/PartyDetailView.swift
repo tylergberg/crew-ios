@@ -3,168 +3,163 @@ import Supabase
 
 struct PartyDetailView: View {
     let partyId: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSettings = false
+    @State private var showEditThemeSheet = false
+    @State private var showEditPartyTypeSheet = false
+    @State private var isLoading = true
 
-    @State private var party: PartyData? = nil
-    @State private var isLoading: Bool = false
-    @State private var errorMessage: String? = nil
-    @State private var selectedTab: PartyDetailTab = .overview
+    @EnvironmentObject var partyManager: PartyManager
+    @EnvironmentObject var sessionManager: SessionManager
+    @StateObject private var dataManager = PartyDataManager()
 
     var body: some View {
         ZStack {
-            Color(red: 0.607, green: 0.784, blue: 0.933).ignoresSafeArea()
+            // Use party theme background instead of hardcoded color
+            partyManager.currentTheme.cardBackgroundColor.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                if isLoading {
-                    ProgressView("Loading party details...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let party = party {
-                    ZStack(alignment: .bottomLeading) {
-                        if let url = URL(string: party.coverImageUrl) {
-                            AsyncImage(url: url) { image in
-                                image.resizable()
-                                     .scaledToFill()
-                            } placeholder: {
-                                Color.gray.opacity(0.3)
-                            }
-                            .frame(height: 220)
-                            .clipped()
-                            .cornerRadius(16)
-                            .shadow(radius: 5)
-                        } else {
-                            Color.gray.opacity(0.3)
-                                .frame(height: 220)
-                                .cornerRadius(16)
-                                .shadow(radius: 5)
-                        }
-
-                        Text(party.name)
-                            .font(.title)
-                            .fontWeight(.bold)
+            if isLoading {
+                // Show loading state while PartyManager loads
+                VStack {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    Text("Loading party...")
+                        .foregroundColor(.white)
+                        .padding(.top, 16)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    // Navigation bar at the top
+                    HStack {
+                                            Button(action: {
+                        print("🔙 Back button tapped - dismissing party detail")
+                        // Post notification to dismiss the party detail view
+                        NotificationCenter.default.post(name: Notification.Name("dismissPartyDetail"), object: nil)
+                        dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.4))
-                            .cornerRadius(10)
-                            .padding()
+                            .padding(12)
+                            .background(Color.black.opacity(0.3))
+                            .clipShape(Circle())
                     }
-                    .padding(.horizontal)
-
-                    PartyTabNavigation(selectedTab: $selectedTab, visibleTabs: PartyDetailTab.allCases)
-                        .padding([.horizontal, .top])
-
-                    ScrollView {
-                        switch selectedTab {
-                        case .overview:
-                            OverviewTabView()
-                        case .crew:
-                            Text("No crew information available.")
-                        case .itinerary:
-                            Text("No itinerary available.")
-                        case .chat:
-                            Text("Chat tab placeholder")
-                        case .vendors:
-                            Text("Vendors tab placeholder")
-                        case .lodging:
-                            Text("Lodging tab placeholder")
-                        case .transport:
-                            Text("Transport tab placeholder")
-                        case .expenses:
-                            Text("Expenses tab placeholder")
-                        case .packing:
-                            Text("Packing tab placeholder")
-                        case .tasks:
-                            Text("Tasks tab placeholder")
-                        case .gallery:
-                            Text("Gallery tab placeholder")
-                        case .ai:
-                            Text("AI tab placeholder")
-                        case .games:
-                            Text("Games tab placeholder")
-                        case .merch:
-                            Text("Merch tab placeholder")
-                        case .map:
-                            Text("Map tab placeholder")
+                        .padding(.leading, 20)
+                        .padding(.top, 10)
+                        
+                        Spacer()
+                        
+                        // Settings dropdown menu (only show for admin/organizer)
+                        if partyManager.isOrganizerOrAdmin {
+                            Menu {
+                                Button("Edit Party Details") {
+                                    // TODO: Open edit party sheet
+                                    print("Edit party details")
+                                }
+                                
+                                Button("Edit Cover Image") {
+                                    // TODO: Open cover image picker
+                                    print("Edit cover image")
+                                }
+                                
+                                Button("Edit Theme") {
+                                    showEditThemeSheet = true
+                                }
+                                
+                                Button("Edit Party Type") {
+                                    showEditPartyTypeSheet = true
+                                }
+                                
+                                Button("Manage Attendees") {
+                                    // TODO: Navigate to crew management
+                                    print("Manage attendees")
+                                }
+                                
+                                Divider()
+                                
+                                Button("Delete Party", role: .destructive) {
+                                    // TODO: Open delete confirmation
+                                    print("Delete party")
+                                }
+                            } label: {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(12)
+                                    .background(Color.black.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.top, 10)
                         }
                     }
-                    .padding()
-                } else {
-                    EmptyView()
+                    .zIndex(1) // Ensure navigation is above content
+                    
+                    // Direct PartyHubView without tab navigation
+                    PartyHubView(partyId: partyId)
+                        .environmentObject(partyManager)
+                        .environmentObject(sessionManager)
+                        .environmentObject(dataManager)
                 }
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await loadParty()
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showSettings) {
+            PartySettingsSheet(partyId: partyId)
+                .environmentObject(partyManager)
+        }
+        .sheet(isPresented: $showEditThemeSheet) {
+            EditThemeSheet(
+                isPresented: $showEditThemeSheet,
+                partyId: UUID(uuidString: partyId) ?? UUID(),
+                currentThemeId: partyManager.themeId,
+                canEdit: partyManager.isOrganizerOrAdmin,
+                onSaved: {
+                    // Refresh party data after theme change
+                    NotificationCenter.default.post(name: .refreshPartyData, object: nil)
+                }
+            )
+        }
+        .sheet(isPresented: $showEditPartyTypeSheet) {
+            EditPartyTypeSheet(
+                isPresented: $showEditPartyTypeSheet,
+                partyId: UUID(uuidString: partyId) ?? UUID(),
+                currentPartyType: partyManager.partyType,
+                canEdit: partyManager.isOrganizerOrAdmin,
+                onSaved: {
+                    // Refresh party data after party type change
+                    NotificationCenter.default.post(name: Notification.Name("refreshPartyData"), object: nil)
+                }
+            )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dismissPartyDetail"))) { _ in
+            print("🔙 Received dismiss notification - dismissing party detail")
+            dismiss()
+        }
+        .onAppear {
+            print("🎯 PartyDetailView appeared - PartyManager isLoaded: \(partyManager.isLoaded)")
+            // Wait for PartyManager to be loaded before showing content
+            if partyManager.isLoaded {
+                isLoading = false
+            } else {
+                // If PartyManager is not loaded, wait a bit and check again
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if partyManager.isLoaded {
+                        isLoading = false
+                    } else {
+                        print("❌ PartyDetailView: PartyManager still not loaded after delay")
+                        // Force load if still not loaded
+                        isLoading = false
+                    }
+                }
+            }
+        }
+        .onChange(of: partyManager.isLoaded) { isLoaded in
+            print("🎯 PartyDetailView: PartyManager isLoaded changed to: \(isLoaded)")
+            if isLoaded {
+                isLoading = false
+            }
         }
     }
-
-    private func loadParty() async {
-        isLoading = true
-        errorMessage = nil
-        party = nil
-
-        struct CityData: Decodable {
-            let timezone: String?
-        }
-
-        struct PartyRow: Decodable {
-            let name: String
-            let description: String?
-            let cover_image_url: String
-            let start_date: String?
-            let end_date: String?
-            let location: String?
-            let party_type: String?
-            let party_vibe_tags: [String]?
-            let cities: CityData?
-        }
-
-        do {
-            let client = SupabaseClient(
-                supabaseURL: URL(string: "https://gyjxjigtihqzepotegjy.supabase.co")!,
-                supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5anhqaWd0aWhxemVwb3RlZ2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyMzEwOTgsImV4cCI6MjA1NzgwNzA5OH0.3HQ7kvYmg7rPfyF8kB8pJe3iaMJ9sYigl8KGN3Q1rYo"
-            )
-
-            let partyRow: PartyRow = try await client
-                .from("parties")
-                .select("id, name, description, cover_image_url, start_date, end_date, location, party_type, party_vibe_tags, cities(timezone)")
-                .eq("id", value: partyId)
-                .single()
-                .execute()
-                .value
-
-            party = PartyData(
-                name: partyRow.name,
-                description: partyRow.description,
-                coverImageUrl: partyRow.cover_image_url,
-                startDate: partyRow.start_date,
-                endDate: partyRow.end_date,
-                location: partyRow.location,
-                partyType: partyRow.party_type,
-                vibeTags: partyRow.party_vibe_tags,
-                timezone: partyRow.cities?.timezone
-            )
-        } catch {
-            errorMessage = "Failed to load party details: \(error.localizedDescription)"
-        }
-
-        isLoading = false
-    }
-}
-
-struct PartyData {
-    let name: String
-    let description: String?
-    let coverImageUrl: String
-    let startDate: String?
-    let endDate: String?
-    let location: String?
-    let partyType: String?
-    let vibeTags: [String]?
-    let timezone: String?
 }

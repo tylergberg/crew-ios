@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>finalsend</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>finalsend</string>
+			</array>
+		</dict>
+		<dict/>
+	</array>
+	<key>MKDirectionsApplicationSupportedModes</key>
+	<array/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to record video responses for the Nearlywed game.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access to record audio for video responses in the Nearlywed game.</string>
+</dict>
+</plist>

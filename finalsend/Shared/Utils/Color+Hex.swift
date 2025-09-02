@@ -30,4 +30,13 @@ extension Color {
 
         self.init(red: r, green: g, blue: b)
     }
+    
+    // Non-optional version that provides a fallback color
+    init(hex: String, fallback: Color = .gray) {
+        if let color = Color(hex: hex) {
+            self = color
+        } else {
+            self = fallback
+        }
+    }
 }
