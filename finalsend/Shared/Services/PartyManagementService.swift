@@ -213,41 +213,66 @@ class PartyManagementService: PartyManagementServiceType {
             
             print("✅ User has admin permissions for party update")
             
-            // Convert updates to Encodable format
-            let encodableUpdates = updates.mapValues { value -> String in
+            // Handle different update types properly for Supabase
+            var stringUpdates: [String: String] = [:]
+            var arrayUpdates: [String: [String]] = [:]
+            
+            for (key, value) in updates {
                 if let stringValue = value as? String {
-                    return stringValue
+                    stringUpdates[key] = stringValue
                 } else if let intValue = value as? Int {
-                    return String(intValue)
+                    stringUpdates[key] = String(intValue)
                 } else if let doubleValue = value as? Double {
-                    return String(doubleValue)
+                    stringUpdates[key] = String(doubleValue)
                 } else if let boolValue = value as? Bool {
-                    return String(boolValue)
+                    stringUpdates[key] = String(boolValue)
+                } else if let arrayValue = value as? [String] {
+                    arrayUpdates[key] = arrayValue
                 } else {
-                    return String(describing: value)
+                    stringUpdates[key] = String(describing: value)
                 }
             }
             
-            // Perform the update
-            let updateResponse: [PartyRow] = try await client
-                .from("parties")
-                .update(encodableUpdates)
-                .eq("id", value: partyId)
-                .select("id, name")
-                .execute()
-                .value
-            
-            if let updatedParty = updateResponse.first {
-                print("✅ Party updated successfully: \(updatedParty.name ?? "Unknown")")
+            // First update string/numeric fields
+            if !stringUpdates.isEmpty {
+                let stringResponse: [PartyRow] = try await client
+                    .from("parties")
+                    .update(stringUpdates)
+                    .eq("id", value: partyId)
+                    .select("id, name")
+                    .execute()
+                    .value
                 
-                // Post notification to refresh party data
-                NotificationCenter.default.post(name: .refreshPartyData, object: nil)
-                
-                return true
-            } else {
-                print("❌ Party update failed - no response")
-                throw PartyManagementError.networkError(NSError(domain: "PartyUpdate", code: 500, userInfo: [NSLocalizedDescriptionKey: "Update failed"]))
+                if stringResponse.isEmpty {
+                    print("❌ String updates failed")
+                    throw PartyManagementError.networkError(NSError(domain: "PartyUpdate", code: 500, userInfo: [NSLocalizedDescriptionKey: "String updates failed"]))
+                }
             }
+            
+            // Then update array fields separately
+            if !arrayUpdates.isEmpty {
+                for (key, arrayValue) in arrayUpdates {
+                    let arrayResponse: [PartyRow] = try await client
+                        .from("parties")
+                        .update([key: arrayValue])
+                        .eq("id", value: partyId)
+                        .select("id, name")
+                        .execute()
+                        .value
+                    
+                    if arrayResponse.isEmpty {
+                        print("❌ Array update failed for key: \(key)")
+                        throw PartyManagementError.networkError(NSError(domain: "PartyUpdate", code: 500, userInfo: [NSLocalizedDescriptionKey: "Array update failed for \(key)"]))
+                    }
+                }
+            }
+            
+            // If we get here, all updates succeeded
+            print("✅ All party updates completed successfully")
+            NotificationCenter.default.post(name: .refreshPartyData, object: nil)
+            return true
+            
+
             
         } catch {
             print("❌ Error updating party: \(error)")
