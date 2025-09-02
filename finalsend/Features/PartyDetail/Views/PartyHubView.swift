@@ -490,6 +490,17 @@ struct PartyHubView: View {
                     action: { showEditPartyTypeModal = true }
                 )
                 
+                // Tasks (summary row) - only visible for organizers and admins
+                if partyManager.isOrganizerOrAdmin {
+                    FeaturePreviewCard(
+                        title: "Tasks",
+                        subtitle: "Manage party tasks & to-dos",
+                        icon: "checklist",
+                        color: Color.brandBlue,
+                        action: { showTasksModal = true }
+                    )
+                }
+                
                 // Dates (summary row)
                 FeaturePreviewCard(
                     title: "Dates",
@@ -674,7 +685,8 @@ struct PartyHubView: View {
                 currentUserRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee,
                 destinationCity: dataManager.currentCity?.city,
                 partyStartDate: partyManager.startDate,
-                partyEndDate: partyManager.endDate
+                partyEndDate: partyManager.endDate,
+                onDismiss: { showTransportModal = false }
             )
         }
         .fullScreenCover(isPresented: $showLodgingModal) {
