@@ -1,0 +1,41 @@
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+/.build/
+/Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods (if any)
+Pods/
+
+# Carthage (if any)
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# User-specific
+*.swp
+.DS_Store
+
+# Archives
+*.xcarchive
+
+# Output
+*.ipa
+*.dSYM
+
+# Supabase/Env
+.supabase/
+.env*
+
