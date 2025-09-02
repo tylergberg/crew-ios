@@ -738,7 +738,8 @@ struct PartyHubView: View {
         }
         .fullScreenCover(isPresented: $showGamesModal) {
             GamesTabView(
-                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role.rawValue ?? "attendee"
+                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role.rawValue ?? "attendee",
+                partyId: partyId
             )
         }
         .fullScreenCover(isPresented: $showGalleryModal) {

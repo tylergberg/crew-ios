@@ -244,10 +244,7 @@ final class FlightsService {
     init(supabase: Any? = nil) {}
     func fetchFlights(partyId: UUID) async throws -> [String] { [] }
 }
-final class PartyGamesService {
-    static let shared = PartyGamesService()
-    func fetchGames(partyId: String) async throws -> [String] { [] }
-}
+// PartyGamesService is now implemented in Shared/Services/PartyGamesService.swift
 final class GalleryService {
     func fetchItems(partyId: UUID, page: Int, limit: Int) async throws -> [String] { [] }
 }
