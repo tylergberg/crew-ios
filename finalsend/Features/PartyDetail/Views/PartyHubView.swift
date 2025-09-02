@@ -494,7 +494,19 @@ struct PartyHubView: View {
                 if partyManager.isOrganizerOrAdmin {
                     FeaturePreviewCard(
                         title: "Tasks",
-                        subtitle: "Manage party tasks & to-dos",
+                        subtitle: {
+                            if let tasksStore = dataManager.tasksStore {
+                                if tasksStore.isLoading {
+                                    return "Loading tasks..."
+                                } else if tasksStore.tasks.isEmpty {
+                                    return "No tasks yet"
+                                } else {
+                                    return "\(tasksStore.tasks.count) tasks"
+                                }
+                            } else {
+                                return "Manage party tasks & to-dos"
+                            }
+                        }(),
                         icon: "checklist",
                         color: Color.brandBlue,
                         action: { showTasksModal = true }
@@ -712,7 +724,9 @@ struct PartyHubView: View {
         }
         .fullScreenCover(isPresented: $showTasksModal) {
             TasksTabView(
-                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee
+                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee,
+                partyId: UUID(uuidString: partyId) ?? UUID(),
+                currentUserId: UUID(uuidString: sessionManager.userProfile?.id ?? "") ?? UUID()
             )
         }
         .fullScreenCover(isPresented: $showPackingModal) {
