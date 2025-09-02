@@ -169,20 +169,21 @@ struct OverviewTabView: View {
                 let end_date: String?
                 let party_type: String?
                 let party_vibe_tags: [String]?
-                let confirmed_attendees: Int?
-                let social_links: [String: String]?
                 let city_id: String?
                 let cities: CityData?
 
                 struct CityData: Decodable {
+                    let id: String?
                     let city: String?
+                    let state_or_province: String?
+                    let country: String?
                     let timezone: String?
                 }
             }
 
             let response = try await client
                 .from("parties")
-                .select("*, cities(*)")
+                .select("id, name, description, start_date, end_date, cover_image_url, theme_id, party_type, party_vibe_tags, city_id, cities(id, city, state_or_province, country, timezone)")
                 .eq("id", value: partyId)
                 .single()
                 .execute()
@@ -195,10 +196,11 @@ struct OverviewTabView: View {
             print("End Date: \(result.end_date ?? "nil")")
             print("Party Type: \(result.party_type ?? "nil")")
             print("Vibe Tags: \(result.party_vibe_tags ?? [])")
+            print("City ID: \(result.city_id ?? "nil")")
             print("City: \(result.cities?.city ?? "nil")")
+            print("State: \(result.cities?.state_or_province ?? "nil")")
+            print("Country: \(result.cities?.country ?? "nil")")
             print("Timezone: \(result.cities?.timezone ?? "nil")")
-            print("Confirmed Attendees: \(result.confirmed_attendees ?? 0)")
-            print("Social Links: \(result.social_links ?? [:])")
 
             // Update party manager
             await MainActor.run {
@@ -226,8 +228,27 @@ struct OverviewTabView: View {
                     print("Failed to parse endDate: \(result.end_date ?? "nil")")
                 }
                 
-                partyManager.location = result.cities?.city ?? "Unknown"
-                print("Set location: \(partyManager.location)")
+                // Set cityId from the parties table if available
+                if let cityId = result.city_id {
+                    partyManager.cityId = UUID(uuidString: cityId)
+                    print("Set cityId: \(partyManager.cityId?.uuidString ?? "nil")")
+                } else {
+                    partyManager.cityId = nil
+                    print("No cityId available")
+                }
+                
+                // Create a proper display name for the location
+                if let city = result.cities?.city {
+                    if let state = result.cities?.state_or_province {
+                        partyManager.location = "\(city), \(state)"
+                    } else {
+                        partyManager.location = city
+                    }
+                    print("Set location: \(partyManager.location)")
+                } else {
+                    partyManager.location = ""
+                    print("No city available")
+                }
                 
                 partyManager.timezone = result.cities?.timezone ?? "America/New_York"
                 print("Set timezone: \(partyManager.timezone)")
@@ -237,12 +258,6 @@ struct OverviewTabView: View {
                 
                 partyManager.vibeTags = result.party_vibe_tags ?? []
                 print("Set vibeTags: \(partyManager.vibeTags)")
-                
-                partyManager.partySize = result.confirmed_attendees ?? 0
-                print("Set partySize: \(partyManager.partySize)")
-                
-                partyManager.socialLinks = Array((result.social_links ?? [:]).values)
-                print("Set socialLinks: \(partyManager.socialLinks)")
                 
                 isLoading = false
                 print("Done fetching. isLoading = false")

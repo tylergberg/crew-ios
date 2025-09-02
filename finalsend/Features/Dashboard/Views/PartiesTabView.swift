@@ -13,7 +13,14 @@ struct PartiesTabView: View {
     @State private var deeplinkPartyId: String? = nil
     @State private var deeplinkOpenChat: Bool = false
     @State private var scrollToTop = false
-    @State private var partyCounts: [PartyTab: Int] = [.upcoming: 0, .inprogress: 0, .past: 0, .declined: 0, .pending: 0]
+    @State private var partyCounts: [PartyTab: Int] = [
+        .upcoming: 0,
+        .pending: 0,
+        .declined: 0,
+        .inprogress: 0,
+        .attended: 0,
+        .didntgo: 0
+    ]
     
     var body: some View {
         ZStack {
@@ -112,7 +119,7 @@ struct PartiesTabView: View {
     }
     
     private var availableTabs: [PartyTab] {
-        return [.upcoming, .inprogress, .past, .declined, .pending]
+        return [.upcoming, .pending, .declined, .inprogress, .attended, .didntgo]
     }
     
 
@@ -335,6 +342,8 @@ struct PartiesTabView: View {
         formatter.dateFormat = "yyyy-MM-dd"
 
         return parties.filter { party in
+            let start = party.startDate.flatMap { formatter.date(from: $0) }
+            let end = party.endDate.flatMap { formatter.date(from: $0) }
             // Check if current user has declined this party
             let currentUserHasDeclined = party.attendees?.contains { attendee in
                 let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
@@ -355,39 +364,28 @@ struct PartiesTabView: View {
             
             print("🔍 Party '\(party.name)' - currentUserHasDeclined: \(currentUserHasDeclined), currentUserHasPending: \(currentUserHasPending), selectedTab: \(selectedTab)")
             
-            // If declined tab is selected, only show declined parties
-            if selectedTab == .declined {
-                return currentUserHasDeclined
+            // Handle parties without dates - show them only in Upcoming
+            guard let start = start, let end = end else {
+                return selectedTab == .upcoming && !(currentUserHasDeclined || currentUserHasPending)
             }
-            
-            // If pending tab is selected, only show pending parties
-            if selectedTab == .pending {
-                return currentUserHasPending
-            }
-            
-            // For other tabs, exclude declined and pending parties
-            if currentUserHasDeclined || currentUserHasPending {
-                return false
-            }
-            
-            // Handle parties without dates - show them in upcoming tab
-            guard let start = party.startDate.flatMap({ formatter.date(from: $0) }),
-                  let end = party.endDate.flatMap({ formatter.date(from: $0) }) else {
-                // If no dates are set, show in upcoming tab
-                return selectedTab == .upcoming
-            }
+
+            let isFuture = start > now
+            let isInProgress = start <= now && end >= now
+            let isPast = end < now
 
             switch selectedTab {
             case .upcoming:
-                return start > now
-            case .inprogress:
-                return start <= now && end >= now
-            case .past:
-                return end < now
-            case .declined:
-                return false // Already handled above
+                return isFuture && !(currentUserHasDeclined || currentUserHasPending)
             case .pending:
-                return false // Already handled above
+                return isFuture && currentUserHasPending
+            case .declined:
+                return isFuture && currentUserHasDeclined
+            case .inprogress:
+                return isInProgress && !(currentUserHasDeclined || currentUserHasPending)
+            case .attended:
+                return isPast && !(currentUserHasDeclined || currentUserHasPending)
+            case .didntgo:
+                return isPast && (currentUserHasDeclined || currentUserHasPending)
             }
         }
         .sorted { lhs, rhs in
@@ -411,14 +409,14 @@ struct PartiesTabView: View {
                 }
             case .inprogress:
                 return (lhsEnd ?? .distantFuture) < (rhsEnd ?? .distantFuture)
-            case .past:
+            case .attended:
+                return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
+            case .didntgo:
                 return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
             case .declined:
-                // Sort declined parties by name since they're not time-sensitive
-                return lhs.name < rhs.name
+                return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
             case .pending:
-                // Sort pending parties by name since they're not time-sensitive
-                return lhs.name < rhs.name
+                return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
             }
         }
     }
@@ -478,9 +476,18 @@ struct PartiesTabView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         
-        var counts: [PartyTab: Int] = [.upcoming: 0, .inprogress: 0, .past: 0, .declined: 0, .pending: 0]
+        var counts: [PartyTab: Int] = [
+            .upcoming: 0,
+            .pending: 0,
+            .declined: 0,
+            .inprogress: 0,
+            .attended: 0,
+            .didntgo: 0
+        ]
         
         for party in parties {
+            let start = party.startDate.flatMap { formatter.date(from: $0) }
+            let end = party.endDate.flatMap { formatter.date(from: $0) }
             // Check if current user has declined this party
             let currentUserHasDeclined = party.attendees?.contains { attendee in
                 let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
@@ -502,19 +509,29 @@ struct PartiesTabView: View {
             print("🔍 [sendPartyCounts] Party '\(party.name)' - currentUserHasDeclined: \(currentUserHasDeclined), currentUserHasPending: \(currentUserHasPending)")
             
             if currentUserHasDeclined {
-                counts[.declined]? += 1
-                print("🔍 [sendPartyCounts] Added to declined count: \(party.name)")
+                if let end = end, end < now {
+                    counts[.didntgo]? += 1
+                    print("🔍 [sendPartyCounts] Declined but past, added to didn't go: \(party.name)")
+                } else {
+                    counts[.declined]? += 1
+                    print("🔍 [sendPartyCounts] Added to declined count: \(party.name)")
+                }
                 continue // Skip counting in other categories
             }
             
             if currentUserHasPending {
-                counts[.pending]? += 1
-                print("🔍 [sendPartyCounts] Added to pending count: \(party.name)")
+                if let end = end, end < now {
+                    counts[.didntgo]? += 1
+                    print("🔍 [sendPartyCounts] Pending but past, added to didn't go: \(party.name)")
+                } else {
+                    counts[.pending]? += 1
+                    print("🔍 [sendPartyCounts] Added to pending count: \(party.name)")
+                }
                 continue // Skip counting in other categories
             }
             
-            guard let start = party.startDate.flatMap({ formatter.date(from: $0) }),
-                  let end = party.endDate.flatMap({ formatter.date(from: $0) }) else {
+            guard let start = start,
+                  let end = end else {
                 // If no dates are set, count as upcoming
                 counts[.upcoming]? += 1
                 continue
@@ -525,7 +542,7 @@ struct PartiesTabView: View {
             } else if start <= now && end >= now {
                 counts[.inprogress]? += 1
             } else {
-                counts[.past]? += 1
+                counts[.attended]? += 1
             }
         }
         

@@ -44,14 +44,6 @@ struct PackingTabView: View {
     }
 }
 
-// Basic UserRole enum to prevent compilation errors
-enum UserRole: String, CaseIterable {
-    case admin = "admin"
-    case organizer = "organizer"
-    case attendee = "attendee"
-    case guest = "guest"
-}
-
 #Preview {
     PackingTabView(
         partyId: UUID(),

@@ -22,7 +22,7 @@ struct ProfileSelectorSheet: View {
         } else {
             return attendees.filter { attendee in
                 attendee.fullName.localizedCaseInsensitiveContains(searchText) ||
-                attendee.email.localizedCaseInsensitiveContains(searchText)
+                (attendee.email ?? "").localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -134,7 +134,7 @@ struct AttendeeRow: View {
                             .fontWeight(.medium)
                             .foregroundColor(LodgingTheme.textPrimary)
                         
-                        Text(attendee.email)
+                        Text(attendee.email ?? "")
                             .font(LodgingTheme.smallFont)
                             .foregroundColor(LodgingTheme.textSecondary)
                     }

@@ -32,6 +32,9 @@ enum PartyDetailTab: String, CaseIterable, Identifiable {
         }
     }
 
+    // Backward-compat to code referencing .displayName
+    var displayName: String { label }
+
     var iconName: String {
         switch self {
         case .overview: return "rectangle.grid.1x2"

@@ -332,6 +332,7 @@ class NotificationManager: NSObject, ObservableObject {
 }
 
 // MARK: - UNUserNotificationCenterDelegate
+@MainActor
 extension NotificationManager: UNUserNotificationCenterDelegate {
     
     func userNotificationCenter(

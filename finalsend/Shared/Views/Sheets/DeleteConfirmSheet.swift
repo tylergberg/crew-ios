@@ -103,31 +103,32 @@ struct DeleteConfirmSheet: View {
 // MARK: - Convenience Initializers
 
 extension DeleteConfirmSheet {
-    static func forLodging(_ lodging: Lodging, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
+    // Accept plain strings to avoid type visibility issues across modules
+    static func forLodging(name: String, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
         return DeleteConfirmSheet(
             title: "Delete Lodging",
             message: "Are you sure you want to delete this lodging? This will also remove all rooms, beds, and assignments.",
-            itemName: lodging.name,
+            itemName: name,
             onConfirm: onConfirm,
             onDismiss: onDismiss
         )
     }
     
-    static func forRoom(_ room: Room, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
+    static func forRoom(name: String, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
         return DeleteConfirmSheet(
             title: "Delete Room",
             message: "Are you sure you want to delete this room? This will also remove all beds and assignments in this room.",
-            itemName: room.name,
+            itemName: name,
             onConfirm: onConfirm,
             onDismiss: onDismiss
         )
     }
     
-    static func forBed(_ bed: Bed, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
+    static func forBed(name: String, onConfirm: @escaping () -> Void, onDismiss: @escaping () -> Void) -> DeleteConfirmSheet {
         return DeleteConfirmSheet(
             title: "Delete Bed",
             message: "Are you sure you want to delete this bed? This will also remove all assignments to this bed.",
-            itemName: bed.bedType.displayName,
+            itemName: name,
             onConfirm: onConfirm,
             onDismiss: onDismiss
         )

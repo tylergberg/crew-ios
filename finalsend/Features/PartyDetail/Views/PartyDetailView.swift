@@ -106,29 +106,19 @@ struct PartyDetailView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showSettings) {
-            PartySettingsSheet(partyId: partyId)
+            PartySettingsSheet(onClose: nil)
                 .environmentObject(partyManager)
         }
         .sheet(isPresented: $showEditThemeSheet) {
             EditThemeSheet(
-                isPresented: $showEditThemeSheet,
-                partyId: UUID(uuidString: partyId) ?? UUID(),
-                currentThemeId: partyManager.themeId,
-                canEdit: partyManager.isOrganizerOrAdmin,
                 onSaved: {
-                    // Refresh party data after theme change
                     NotificationCenter.default.post(name: .refreshPartyData, object: nil)
                 }
             )
         }
         .sheet(isPresented: $showEditPartyTypeSheet) {
             EditPartyTypeSheet(
-                isPresented: $showEditPartyTypeSheet,
-                partyId: UUID(uuidString: partyId) ?? UUID(),
-                currentPartyType: partyManager.partyType,
-                canEdit: partyManager.isOrganizerOrAdmin,
                 onSaved: {
-                    // Refresh party data after party type change
                     NotificationCenter.default.post(name: Notification.Name("refreshPartyData"), object: nil)
                 }
             )
@@ -143,16 +133,8 @@ struct PartyDetailView: View {
             if partyManager.isLoaded {
                 isLoading = false
             } else {
-                // If PartyManager is not loaded, wait a bit and check again
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if partyManager.isLoaded {
-                        isLoading = false
-                    } else {
-                        print("❌ PartyDetailView: PartyManager still not loaded after delay")
-                        // Force load if still not loaded
-                        isLoading = false
-                    }
-                }
+                // Keep showing the loading state until PartyManager reports loaded
+                isLoading = true
             }
         }
         .onChange(of: partyManager.isLoaded) { isLoaded in

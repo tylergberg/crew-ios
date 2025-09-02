@@ -17,13 +17,9 @@ class ExpensesStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        do {
-            // For now, return empty array to prevent crashes
-            // This can be implemented later with actual Supabase queries
-            expenses = []
-        } catch {
-            self.error = error
-        }
+        // For now, return empty array to prevent crashes
+        // This can be implemented later with actual Supabase queries
+        expenses = []
     }
     
     func cleanup() {

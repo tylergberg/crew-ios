@@ -41,29 +41,33 @@ struct CategoryTabsView: View {
         switch tab {
         case .upcoming:
             return "calendar"
-        case .inprogress:
-            return "party.popper.fill"
-        case .past:
-            return "clock.fill"
-        case .declined:
-            return "xmark.circle.fill"
         case .pending:
             return "clock.badge.questionmark"
+        case .declined:
+            return "xmark.circle.fill"
+        case .inprogress:
+            return "party.popper.fill"
+        case .attended:
+            return "checkmark.seal.fill"
+        case .didntgo:
+            return "figure.walk.departure"
         }
     }
     
     private func tabLabel(for tab: PartyTab) -> String {
         switch tab {
         case .upcoming:
-            return "Party Plans"
-        case .inprogress:
-            return "Party Time"
-        case .past:
-            return "Party Past"
-        case .declined:
-            return "Declined"
+            return "Upcoming"
         case .pending:
-            return "Pending"
+            return "Pending Invites"
+        case .declined:
+            return "Declined Invites"
+        case .inprogress:
+            return "Live Trips"
+        case .attended:
+            return "Attended Trips"
+        case .didntgo:
+            return "Didn't Go"
         }
     }
 }
