@@ -172,6 +172,7 @@ struct MyGamesView: View {
     @Binding var showingDeleteAlert: Bool
     @Binding var gameToDelete: PartyGame?
     @State private var gameToEdit: PartyGame?
+    @State private var gameToRecord: PartyGame?
     
     var body: some View {
         ScrollView {
@@ -195,6 +196,10 @@ struct MyGamesView: View {
                                     gameToEdit = game
                                     
                                     print("🎯 [MyGamesView] gameToEdit: \(gameToEdit?.title ?? "nil")")
+                                },
+                                onEnterRecordMode: {
+                                    print("🎯 [MyGamesView] Enter Record Mode tapped for game: \(game.title)")
+                                    gameToRecord = game
                                 }
                             )
                             .padding(.horizontal, 20)
@@ -213,7 +218,24 @@ struct MyGamesView: View {
             GameBuilderView(
                 partyId: gamesStore.currentPartyId,
                 gameId: game.id.uuidString,
-                gameTitle: game.title
+                gameTitle: game.title,
+                onGameSaved: {
+                    // Refresh games after saving
+                    Task {
+                        await gamesStore.loadGames()
+                    }
+                }
+            )
+        }
+        .fullScreenCover(item: $gameToRecord) { game in
+            RecordGameAnswersView(
+                game: game,
+                onGameUpdated: {
+                    // Refresh games data after video is recorded
+                    Task {
+                        await gamesStore.loadGames()
+                    }
+                }
             )
         }
         .overlay(
@@ -240,6 +262,7 @@ struct MyGameCard: View {
     let game: PartyGame
     let onDelete: () -> Void
     let onEnterBuilder: () -> Void
+    let onEnterRecordMode: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -331,6 +354,17 @@ struct MyGameCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(Color.blue)
+                .cornerRadius(10)
+                
+                Button("Record Mode") {
+                    onEnterRecordMode()
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.orange)
                 .cornerRadius(10)
                 
                 Button("Play Game") {
