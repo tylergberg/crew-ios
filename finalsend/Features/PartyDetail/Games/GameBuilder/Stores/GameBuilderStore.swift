@@ -4,10 +4,14 @@ import SwiftUI
 @MainActor
 class GameBuilderStore: ObservableObject {
     @Published var questions: [GameQuestion] = []
+    @Published var recorderName: String = ""
+    @Published var livePlayerName: String = ""
     @Published var isLoading = false
     @Published var error: String?
     
     private let gamesService = PartyGamesService.shared
+    private var gameId: String?
+    var onGameSaved: (() -> Void)?
     
     init() {
         print("🔄 GameBuilderStore initialized")
@@ -54,7 +58,22 @@ class GameBuilderStore: ObservableObject {
     
     func moveQuestion(from source: IndexSet, to destination: Int) {
         print("🔄 moveQuestion called")
-        questions.move(fromOffsets: source, toOffset: destination)
+        print("📝 Source indices: \(source)")
+        print("📝 Destination: \(destination)")
+        print("📝 Questions before move: \(questions.map { $0.text })")
+        
+        guard let sourceIndex = source.first else {
+            print("❌ No source index found")
+            return
+        }
+        
+        let questionToMove = questions[sourceIndex]
+        questions.remove(at: sourceIndex)
+        
+        let adjustedDestination = destination > sourceIndex ? destination - 1 : destination
+        questions.insert(questionToMove, at: adjustedDestination)
+        
+        print("📝 Questions after move: \(questions.map { $0.text })")
         print("✅ Moved question. New count: \(questions.count)")
     }
     
@@ -70,6 +89,7 @@ class GameBuilderStore: ObservableObject {
     
     func loadExistingGame(gameId: String) {
         print("🔄 loadExistingGame called with gameId: \(gameId)")
+        self.gameId = gameId
         print("📝 Current questions count before loading: \(questions.count)")
         
         isLoading = true
@@ -85,8 +105,11 @@ class GameBuilderStore: ObservableObject {
                     
                     await MainActor.run {
                         self.questions = game.questions
+                        self.recorderName = game.recorderName ?? ""
+                        self.livePlayerName = game.livePlayerName ?? ""
                         self.isLoading = false
                         print("🔄 Updated questions array: \(self.questions.count) questions")
+                        print("📝 Recorder: \(self.recorderName), Live Player: \(self.livePlayerName)")
                         print("✅ Loading completed successfully")
                     }
                 } else {
@@ -108,9 +131,15 @@ class GameBuilderStore: ObservableObject {
         }
     }
     
-    func saveGame() {
+    func saveGame() async {
         print("🔄 saveGame called")
         print("📝 Questions to save: \(questions.count)")
+        
+        guard let gameId = gameId else {
+            print("❌ No game ID available for saving")
+            error = "No game ID available for saving"
+            return
+        }
         
         guard !questions.isEmpty else {
             print("❌ No questions to save")
@@ -121,10 +150,37 @@ class GameBuilderStore: ObservableObject {
         isLoading = true
         error = nil
         
-        // For now, just simulate saving
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.isLoading = false
-            print("✅ Game saved successfully (simulated)")
+        do {
+            print("🔄 Saving questions to database...")
+            print("📝 Game ID: \(gameId)")
+            print("📝 Questions count: \(questions.count)")
+            print("📝 Questions: \(questions.map { $0.text })")
+            
+            let success = try await gamesService.updateGameQuestions(
+                gameId: gameId, 
+                questions: questions, 
+                recorderName: recorderName.isEmpty ? nil : recorderName,
+                livePlayerName: livePlayerName.isEmpty ? nil : livePlayerName
+            )
+            
+            if success {
+                print("✅ Game saved successfully to database")
+                error = nil
+                
+                // Notify parent to refresh games
+                await MainActor.run {
+                    onGameSaved?()
+                }
+            } else {
+                print("❌ Failed to save game")
+                error = "Failed to save game"
+            }
+        } catch {
+            print("❌ Error saving game: \(error)")
+            print("❌ Error details: \(error)")
+            self.error = "Failed to save game: \(error.localizedDescription)"
         }
+        
+        isLoading = false
     }
 }

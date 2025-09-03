@@ -90,13 +90,22 @@ class PartyGamesService: ObservableObject {
         }
     }
     
-    /// Update game questions
-    func updateGameQuestions(gameId: String, questions: [GameQuestion]) async throws -> Bool {
+    /// Update game questions and player names
+    func updateGameQuestions(gameId: String, questions: [GameQuestion], recorderName: String? = nil, livePlayerName: String? = nil) async throws -> Bool {
         struct UpdateQuestionsRequest: Codable {
             let questions: [GameQuestion]
+            let recorder_name: String?
+            let live_player_name: String?
         }
         
-        let updateData = UpdateQuestionsRequest(questions: questions)
+        let updateData = UpdateQuestionsRequest(
+            questions: questions,
+            recorder_name: recorderName,
+            live_player_name: livePlayerName
+        )
+        
+        print("🔄 [PartyGamesService] Updating game \(gameId) with \(questions.count) questions")
+        print("📝 [PartyGamesService] Questions: \(questions.map { $0.text })")
         
         try await supabase
             .from("party_games")
@@ -104,6 +113,7 @@ class PartyGamesService: ObservableObject {
             .eq("id", value: gameId)
             .execute()
         
+        print("✅ [PartyGamesService] Game questions updated successfully")
         return true
     }
     

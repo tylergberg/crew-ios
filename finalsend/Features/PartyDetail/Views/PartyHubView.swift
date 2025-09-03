@@ -399,15 +399,16 @@ struct PartyHubView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 24) {
-                // Party header with square cover image (like dashboard)
-                VStack(alignment: .leading, spacing: 16) {
+                // Party header with cover image extending to edges and title underneath
+                VStack(alignment: .leading, spacing: 0) {
+                    // Cover image extending to edges (no padding)
                     GeometryReader { geometry in
                         ZStack(alignment: .topTrailing) {
                             CoverPhotoView(
                                 imageURL: partyManager.coverImageURL,
                                 width: geometry.size.width,
                                 height: geometry.size.width,
-                                cornerRadius: 16,
+                                cornerRadius: 0, // No corner radius for top image
                                 placeholderIcon: "photo",
                                 placeholderText: "No Cover Photo"
                             )
@@ -428,19 +429,23 @@ struct PartyHubView: View {
                     }
                     .aspectRatio(1, contentMode: .fit)
                     
-                    Text(partyManager.name.isEmpty ? "Untitled Party" : partyManager.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.titleDark)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    
-                    if !partyManager.description.isEmpty {
-                        Text(partyManager.description)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                    // Title and description section with padding
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(partyManager.name.isEmpty ? "Untitled Party" : partyManager.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.titleDark)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        
+                        if !partyManager.description.isEmpty {
+                            Text(partyManager.description)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
                 }
-                .padding(20)
                 .background(.ultraThinMaterial)
                 .cornerRadius(16)
                 .overlay(
@@ -453,7 +458,7 @@ struct PartyHubView: View {
                 FeaturePreviewCard(
                     title: "Crew",
                     subtitle: dataManager.isAttendeesLoading ? "Loading attendees…" : (dataManager.attendees.isEmpty ? "No attendees yet" : "\(dataManager.attendees.count) attendees"),
-                    icon: "person.3.fill",
+                    icon: "face.smiling.inverse",
                     color: Color.brandBlue,
                     action: { showCrewModal = true }
                 )
@@ -469,7 +474,7 @@ struct PartyHubView: View {
                         }
                         return "Pending"
                     }(),
-                    icon: "envelope.fill",
+                    icon: "hand.thumbsup.circle.fill",
                     color: Color.brandBlue,
                     action: {
                         if let me = dataManager.attendees.first(where: { $0.isCurrentUser }) {
@@ -485,7 +490,7 @@ struct PartyHubView: View {
                 FeaturePreviewCard(
                     title: "Party Type",
                     subtitle: partyManager.partyType.isEmpty ? "Not specified" : partyManager.partyType,
-                    icon: "tag.fill",
+                    icon: "popcorn.circle.fill",
                     color: Color.brandBlue,
                     action: { showEditPartyTypeModal = true }
                 )
@@ -507,7 +512,7 @@ struct PartyHubView: View {
                                 return "Manage party tasks & to-dos"
                             }
                         }(),
-                        icon: "checklist",
+                        icon: "checkmark.circle.fill",
                         color: Color.brandBlue,
                         action: { showTasksModal = true }
                     )
@@ -536,7 +541,7 @@ struct PartyHubView: View {
                             return "\(startFull) - \(endFull)"
                         }
                     }(),
-                    icon: "calendar",
+                    icon: "calendar.circle.fill",
                     color: Color.brandBlue,
                     action: { showEditDatesModal = true }
                 )
@@ -562,7 +567,7 @@ struct PartyHubView: View {
                             return "Set destination & city"
                         }
                     }(),
-                    icon: "mappin.and.ellipse",
+                    icon: "pin.circle.fill",
                     color: Color.brandBlue,
                     action: { showEditLocationModal = true }
                 )
@@ -581,85 +586,78 @@ struct PartyHubView: View {
                             }
                         }
                     }(),
-                    icon: "sparkles",
+                    icon: "tag.circle.fill",
                     color: Color.brandBlue,
                     action: { showEditPartyVibeModal = true }
                 )
                 
                 FeaturePreviewCard(
-                    title: "Party Theme",
-                    subtitle: "Customize colors & style",
-                    icon: "paintbrush.fill",
-                    color: Color.brandBlue,
-                    action: { showThemeModal = true }
-                )
-                FeaturePreviewCard(
                     title: "Itinerary",
                     subtitle: "Plan events & schedule",
-                    icon: "calendar.badge.clock",
+                    icon: "list.bullet.circle.fill",
                     color: Color.brandBlue,
                     action: { showItineraryModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Transport",
                     subtitle: "Flights & rides",
-                    icon: "car",
+                    icon: "airplane.circle.fill",
                     color: Color.brandBlue,
                     action: { showTransportModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Lodging",
                     subtitle: "Stay details & rooms",
-                    icon: "house",
+                    icon: "house.circle.fill",
                     color: Color.brandBlue,
                     action: { showLodgingModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Packing",
                     subtitle: "Shared packing lists",
-                    icon: "shippingbox",
+                    icon: "shippingbox.circle.fill",
                     color: Color.brandBlue,
                     action: { showPackingModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Merch",
                     subtitle: "Custom apparel & accessories",
-                    icon: "tshirt",
+                    icon: "tshirt.circle.fill",
                     color: Color.brandBlue,
                     action: { showShopModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Games",
                     subtitle: "Activities & icebreakers",
-                    icon: "gamecontroller",
+                    icon: "gamecontroller.circle.fill",
                     color: Color.brandBlue,
                     action: { showGamesModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Expenses",
                     subtitle: "Track spending & splits",
-                    icon: "dollarsign.circle",
+                    icon: "creditcard.circle.fill",
                     color: Color.brandBlue,
                     action: { showExpensesModal = true }
                 )
                 FeaturePreviewCard(
                     title: "Album",
                     subtitle: "Photos & memories",
-                    icon: "photo.on.rectangle",
+                    icon: "photo.circle.fill",
                     color: Color.brandBlue,
                     action: { showGalleryModal = true }
                 )
                 FeaturePreviewCard(
                     title: "AI Assistant",
                     subtitle: "Plan smarter with AI",
-                    icon: "wand.and.stars",
+                    icon: "lightbulb.circle.fill",
                     color: Color.brandBlue,
                     action: {}
                 )
                 FeaturePreviewCard(
                     title: "Chat",
                     subtitle: "Group messages",
-                    icon: "message",
+                    icon: "bubble.circle.fill",
                     color: Color.brandBlue,
                     action: { showChatModal = true }
                 )

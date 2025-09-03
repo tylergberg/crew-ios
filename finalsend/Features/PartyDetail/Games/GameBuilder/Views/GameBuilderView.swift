@@ -4,6 +4,7 @@ struct GameBuilderView: View {
     let partyId: String
     let gameId: String?
     let gameTitle: String
+    let onGameSaved: (() -> Void)?
     
     @StateObject private var builderStore = GameBuilderStore()
     @Environment(\.dismiss) private var dismiss
@@ -32,11 +33,13 @@ struct GameBuilderView: View {
                     Button("Save") {
                         Task {
                             await builderStore.saveGame()
+                            // Call the callback to notify parent that game was saved
+                            onGameSaved?()
                             dismiss()
                         }
                     }
                     .fontWeight(.semibold)
-                    .disabled(builderStore.questions.isEmpty)
+                    .disabled(builderStore.questions.isEmpty || builderStore.isLoading)
                 }
             }
         }
@@ -44,16 +47,37 @@ struct GameBuilderView: View {
             if let gameId = gameId {
                 builderStore.loadExistingGame(gameId: gameId)
             }
+            // Set the callback for when the game is saved
+            builderStore.onGameSaved = onGameSaved
         }
-        .sheet(isPresented: $showingAddCustomQuestion) {
-            AddCustomQuestionView { questionText, plannerNote in
-                builderStore.addCustomQuestion(text: questionText, plannerNote: plannerNote)
+        .overlay(
+            Group {
+                if showingAddCustomQuestion {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showingAddCustomQuestion = false
+                        }
+                    
+                    AddCustomQuestionView(
+                        onSave: { questionText, plannerNote in
+                            builderStore.addCustomQuestion(text: questionText, plannerNote: plannerNote)
+                            showingAddCustomQuestion = false
+                        },
+                        onCancel: {
+                            showingAddCustomQuestion = false
+                        }
+                    )
+                }
             }
-        }
+        )
         .sheet(isPresented: $showingAddFromTemplates) {
-            AddFromTemplatesView { questionText, plannerNote in
-                builderStore.addTemplateQuestion(text: questionText, plannerNote: plannerNote)
-            }
+            AddFromTemplatesView(
+                onSave: { questionText, plannerNote in
+                    builderStore.addTemplateQuestion(text: questionText, plannerNote: plannerNote)
+                },
+                game: createTemporaryGame()
+            )
         }
     }
     
@@ -86,6 +110,7 @@ struct GameBuilderView: View {
         .padding(.top, 20)
         .padding(.bottom, 16)
         .background(Color(.systemBackground))
+        .padding(.bottom, 20)
     }
     
     // MARK: - Questions Content View
@@ -177,13 +202,39 @@ struct GameBuilderView: View {
                 builderStore.removeQuestion(id: question.id)
             },
             onMoveUp: index > 0 ? {
+                print("🔄 Move Up tapped for question \(index + 1)")
+                print("📝 Current questions count: \(builderStore.questions.count)")
+                print("📝 Can move up: \(index > 0)")
                 let sourceIndexSet = IndexSet(integer: index)
+                print("📝 Moving from index \(index) to index \(index - 1)")
                 builderStore.moveQuestion(from: sourceIndexSet, to: index - 1)
             } : nil,
             onMoveDown: index < builderStore.questions.count - 1 ? {
+                print("🔄 Move Down tapped for question \(index + 1)")
+                print("📝 Current questions count: \(builderStore.questions.count)")
+                print("📝 Can move down: \(index < builderStore.questions.count - 1)")
                 let sourceIndexSet = IndexSet(integer: index)
+                print("📝 Moving from index \(index) to index \(index + 1)")
                 builderStore.moveQuestion(from: sourceIndexSet, to: index + 1)
             } : nil
+        )
+    }
+    
+    // MARK: - Helper Methods
+    private func createTemporaryGame() -> PartyGame? {
+        // Create a temporary PartyGame object for template personalization
+        // This is only used for displaying personalized template questions
+        return PartyGame(
+            partyId: UUID(uuidString: partyId) ?? UUID(),
+            createdBy: UUID(), // This won't be used for personalization
+            gameType: .newlywed, // Default type
+            title: gameTitle,
+            recorderName: builderStore.recorderName.isEmpty ? nil : builderStore.recorderName,
+            livePlayerName: builderStore.livePlayerName.isEmpty ? nil : builderStore.livePlayerName,
+            questions: builderStore.questions,
+            answers: [:],
+            videos: [:],
+            status: .notStarted
         )
     }
 }
@@ -227,8 +278,6 @@ struct QuestionCard: View {
             Spacer()
             
             HStack(spacing: 8) {
-                moveButtons
-                
                 Menu {
                     Button(action: {
                         editedText = question.text
@@ -236,6 +285,18 @@ struct QuestionCard: View {
                         isEditing = true
                     }) {
                         Label("Edit Question", systemImage: "pencil")
+                    }
+                    
+                    if let onMoveUp = onMoveUp {
+                        Button(action: onMoveUp) {
+                            Label("Move Up", systemImage: "chevron.up")
+                        }
+                    }
+                    
+                    if let onMoveDown = onMoveDown {
+                        Button(action: onMoveDown) {
+                            Label("Move Down", systemImage: "chevron.down")
+                        }
                     }
                     
                     Button(role: .destructive, action: onDelete) {
@@ -251,28 +312,7 @@ struct QuestionCard: View {
         }
     }
     
-    // MARK: - Move Buttons
-    private var moveButtons: some View {
-        HStack(spacing: 4) {
-            if let onMoveUp = onMoveUp {
-                Button(action: onMoveUp) {
-                    Image(systemName: "chevron.up")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            
-            if let onMoveDown = onMoveDown {
-                Button(action: onMoveDown) {
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-    }
+
     
     // MARK: - Question Content
     @ViewBuilder

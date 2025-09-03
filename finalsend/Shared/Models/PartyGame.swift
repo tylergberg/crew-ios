@@ -121,6 +121,8 @@ struct PartyGame: Identifiable, Codable, Equatable {
     let createdBy: UUID
     let gameType: GameType
     let title: String
+    let recorderName: String?
+    let livePlayerName: String?
     let questions: [GameQuestion]
     let answers: [String: GameAnswer]
     let videos: [String: GameVideo]
@@ -155,12 +157,26 @@ struct PartyGame: Identifiable, Codable, Equatable {
         return Double(answerCount) / Double(questionCount)
     }
     
+    // Helper function to replace placeholders in question text
+    func personalizeQuestion(_ questionText: String) -> String {
+        var personalized = questionText
+        if let recorder = recorderName {
+            personalized = personalized.replacingOccurrences(of: "[X]", with: recorder)
+        }
+        if let livePlayer = livePlayerName {
+            personalized = personalized.replacingOccurrences(of: "[Y]", with: livePlayer)
+        }
+        return personalized
+    }
+    
     enum CodingKeys: String, CodingKey {
         case id
         case partyId = "party_id"
         case createdBy = "created_by"
         case gameType = "game_type"
         case title
+        case recorderName = "recorder_name"
+        case livePlayerName = "live_player_name"
         case questions
         case answers
         case videos
@@ -181,6 +197,8 @@ struct PartyGame: Identifiable, Codable, Equatable {
         createdBy: UUID,
         gameType: GameType,
         title: String,
+        recorderName: String? = nil,
+        livePlayerName: String? = nil,
         questions: [GameQuestion],
         answers: [String: GameAnswer],
         videos: [String: GameVideo],
@@ -198,6 +216,8 @@ struct PartyGame: Identifiable, Codable, Equatable {
         self.createdBy = createdBy
         self.gameType = gameType
         self.title = title
+        self.recorderName = recorderName
+        self.livePlayerName = livePlayerName
         self.questions = questions
         self.answers = answers
         self.videos = videos
@@ -220,6 +240,8 @@ struct PartyGame: Identifiable, Codable, Equatable {
         createdBy = try container.decode(UUID.self, forKey: .createdBy)
         gameType = try container.decode(GameType.self, forKey: .gameType)
         title = try container.decode(String.self, forKey: .title)
+        recorderName = try container.decodeIfPresent(String.self, forKey: .recorderName)
+        livePlayerName = try container.decodeIfPresent(String.self, forKey: .livePlayerName)
         status = try container.decode(GameStatus.self, forKey: .status)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -315,12 +337,12 @@ struct GameVideo: Codable, Equatable {
     let respondentName: String?
     
     enum CodingKeys: String, CodingKey {
-        case questionId = "question_id"
-        case videoUrl = "video_url"
-        case thumbnailUrl = "thumbnail_url"
-        case uploadedAt = "uploaded_at"
+        case questionId = "questionId"
+        case videoUrl = "videoUrl"
+        case thumbnailUrl = "thumbnailUrl"
+        case uploadedAt = "uploadedAt"
         case duration
-        case respondentName = "respondent_name"
+        case respondentName = "respondentName"
     }
 }
 
@@ -334,43 +356,70 @@ extension GameQuestion {
             isCustom: false,
             plannerNote: "A sweet moment to capture",
             questionForRecorder: "When did you first realize you were in love?",
-            questionForLiveGuest: "When did your partner first realize they were in love?"
+            questionForLiveGuest: "When did [Y] first realize they were in love?"
         ),
         GameQuestion(
             id: "template_2_1756814502895",
-            text: "What's their biggest fear?",
+            text: "What's [Y]'s biggest fear?",
             category: "habits_personality",
             isCustom: false,
             plannerNote: "Get to know their vulnerabilities",
-            questionForRecorder: "What's their biggest fear?",
-            questionForLiveGuest: "What does your partner say is your biggest fear?"
+            questionForRecorder: "What's [Y]'s biggest fear?",
+            questionForLiveGuest: "What does [Y] say is [X]'s biggest fear?"
         ),
         GameQuestion(
             id: "template_3_1756814502896",
-            text: "What's their favorite movie?",
+            text: "What's [Y]'s favorite movie?",
             category: "wildcard_fun",
             isCustom: false,
             plannerNote: "A fun pop culture question",
-            questionForRecorder: "What's their favorite movie?",
-            questionForLiveGuest: "What movie does your partner say is your favorite?"
+            questionForRecorder: "What's [Y]'s favorite movie?",
+            questionForLiveGuest: "What movie does [Y] say is [X]'s favorite?"
         ),
         GameQuestion(
             id: "template_4_1756814502897",
-            text: "What's their most annoying habit?",
+            text: "What's [Y]'s most annoying habit?",
             category: "habits_personality",
             isCustom: false,
             plannerNote: "Keep it light and funny",
-            questionForRecorder: "What's their most annoying habit?",
-            questionForLiveGuest: "What does your partner say is your most annoying habit?"
+            questionForRecorder: "What's [Y]'s most annoying habit?",
+            questionForLiveGuest: "What does [Y] say is [X]'s most annoying habit?"
         ),
         GameQuestion(
             id: "template_5_1756814502898",
-            text: "Where would they want to go on their dream vacation?",
+            text: "Where would [Y] want to go on their dream vacation?",
             category: "wildcard_fun",
             isCustom: false,
             plannerNote: "Dream big with this one",
-            questionForRecorder: "Where would they want to go on their dream vacation?",
-            questionForLiveGuest: "Where does your partner say you'd want to go on your dream vacation?"
+            questionForRecorder: "Where would [Y] want to go on their dream vacation?",
+            questionForLiveGuest: "Where does [Y] say [X] would want to go on their dream vacation?"
+        ),
+        GameQuestion(
+            id: "template_6_1756814502899",
+            text: "What's one chore that [Y] absolutely hates?",
+            category: "habits_personality",
+            isCustom: false,
+            plannerNote: "Keep it light and relatable",
+            questionForRecorder: "What's one chore that [Y] absolutely hates?",
+            questionForLiveGuest: "What chore does [Y] say [X] absolutely hates?"
+        ),
+        GameQuestion(
+            id: "template_7_1756814502900",
+            text: "What's [Y]'s go-to comfort food?",
+            category: "habits_personality",
+            isCustom: false,
+            plannerNote: "Food questions are always fun",
+            questionForRecorder: "What's [Y]'s go-to comfort food?",
+            questionForLiveGuest: "What does [Y] say is [X]'s go-to comfort food?"
+        ),
+        GameQuestion(
+            id: "template_8_1756814502901",
+            text: "What's [Y]'s biggest pet peeve?",
+            category: "habits_personality",
+            isCustom: false,
+            plannerNote: "This could be funny",
+            questionForRecorder: "What's [Y]'s biggest pet peeve?",
+            questionForLiveGuest: "What does [Y] say is [X]'s biggest pet peeve?"
         )
     ]
 }
