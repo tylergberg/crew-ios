@@ -27,6 +27,7 @@ struct UnifiedProfileView: View {
     let crewService: CrewService?
     let onCrewDataUpdated: (() -> Void)?
     let showTaskManagement: Bool
+    let useNavigationForTasks: Bool
     
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = UnifiedProfileViewModel()
@@ -54,7 +55,20 @@ struct UnifiedProfileView: View {
 
     
     var body: some View {
-        NavigationStack {
+        Group {
+            if useNavigationForTasks {
+                // When using navigation for tasks, we're already in a NavigationView
+                contentView
+            } else {
+                // When using modal presentation, we need our own NavigationStack
+                NavigationStack {
+                    contentView
+                }
+            }
+        }
+    }
+    
+    private var contentView: some View {
             ScrollView(.vertical, showsIndicators: false) {
                 Color.neutralBackground.ignoresSafeArea()
                 VStack(spacing: 24) {
@@ -152,25 +166,31 @@ struct UnifiedProfileView: View {
                 .padding(.bottom, 40)
             }
             .background(Color.white)
+            .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .navigationBarItems(
-                leading: Button("✕") {
-                    dismiss()
+            .navigationBarBackButtonHidden(!useNavigationForTasks) // Hide back button only in modal context
+            .toolbar {
+                // Show X button only in modal context (when useNavigationForTasks is false)
+                if !useNavigationForTasks {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("✕") {
+                            dismiss()
+                        }
+                        .foregroundColor(Color(red: 0.93, green: 0.51, blue: 0.25))
+                        .font(.title2)
+                        .fontWeight(.medium)
+                    }
                 }
-                .foregroundColor(Color(red: 0.93, green: 0.51, blue: 0.25))
-                .font(.title2)
-                .fontWeight(.medium),
-                trailing: HStack(spacing: 16) {
-                    // My Tasks Button (only show if task management is enabled and own profile)
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
                     if isOwnProfile && showTaskManagement {
                         Button(action: {
                             showingNotificationCenter = true
                         }) {
                             ZStack {
-                                Image(systemName: "checklist")
-                                    .foregroundColor(Color(red: 0.93, green: 0.51, blue: 0.25))
-                                    .font(.title3)
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(Color.green)
+                                    .font(.title2)
                                 
                                 if unreadTaskCount > 0 {
                                     Text("\(unreadTaskCount)")
@@ -186,8 +206,7 @@ struct UnifiedProfileView: View {
                         }
                     }
                 }
-            )
-        }
+            }
         .onAppear {
             viewModel.crewService = crewService
             viewModel.loadProfile(userId: userId)
@@ -215,7 +234,20 @@ struct UnifiedProfileView: View {
                 NotificationTestView()
             }
         }
-        .fullScreenCover(isPresented: $showingNotificationCenter) {
+        .background(
+            Group {
+                if useNavigationForTasks {
+                    NavigationLink(
+                        destination: NotificationCenterView(),
+                        isActive: $showingNotificationCenter,
+                        label: { EmptyView() }
+                    )
+                } else {
+                    EmptyView()
+                }
+            }
+        )
+        .fullScreenCover(isPresented: .constant(!useNavigationForTasks && showingNotificationCenter)) {
             NotificationCenterView()
         }
         .fullScreenCover(isPresented: $showingNotificationSettings) {
@@ -1768,7 +1800,8 @@ class SetSpecialRoleModalViewModel: ObservableObject {
         isOwnProfile: true,
         crewService: nil,
         onCrewDataUpdated: nil,
-        showTaskManagement: true
+        showTaskManagement: true,
+        useNavigationForTasks: true
     )
 }
 

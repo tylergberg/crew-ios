@@ -50,7 +50,23 @@ struct MainTabView: View {
                         .animation(.easeInOut(duration: 0.3), value: partiesLoaded)
                 }
                 
-
+                // Hidden NavigationLink for profile
+                NavigationLink(
+                    destination: currentUserId.map { userId in
+                        UnifiedProfileView(
+                            userId: userId,
+                            partyContext: nil,
+                            isOwnProfile: true,
+                            crewService: nil,
+                            onCrewDataUpdated: nil,
+                            showTaskManagement: true,
+                            useNavigationForTasks: true
+                        )
+                    },
+                    isActive: $showingProfile,
+                    label: { EmptyView() }
+                )
+                .hidden()
             }
             .navigationBarHidden(true)
         }
@@ -60,18 +76,7 @@ struct MainTabView: View {
                 .environmentObject(appNavigator)
                 .navigationBarHidden(true)
         }
-        .fullScreenCover(isPresented: $showingProfile) {
-            if let userId = currentUserId {
-                UnifiedProfileView(
-                    userId: userId,
-                    partyContext: nil,
-                    isOwnProfile: true,
-                    crewService: nil,
-                    onCrewDataUpdated: nil,
-                    showTaskManagement: true
-                )
-            }
-                }
+
         .fullScreenCover(isPresented: $authManager.needsNameCollection) {
             NameCollectionView(
                 phoneNumber: authManager.pendingPhoneNumber,

@@ -42,7 +42,7 @@ struct VideoRecordingView: View {
                             .font(.headline)
                             .foregroundColor(.white)
                         
-                        Text(question.text)
+                        Text(question.textWithReplacedPlaceholders(using: game))
                             .font(.title2)
                             .fontWeight(.medium)
                             .foregroundColor(.white)
@@ -85,7 +85,7 @@ struct VideoRecordingView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                     
-                    Text("Question: \(question.text)")
+                    Text("Question: \(question.textWithReplacedPlaceholders(using: game))")
                         .font(.headline)
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)

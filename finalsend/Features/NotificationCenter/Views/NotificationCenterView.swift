@@ -8,55 +8,51 @@ struct NotificationCenterView: View {
     @EnvironmentObject private var appNavigator: AppNavigator
     @State private var selectedTask: TaskWithPartyContext?
     @State private var showingTaskEdit = false
+    @State private var gameToRecord: PartyGame?
+    @State private var showingRecordMode = false
+    
+    private let gamesService = PartyGamesService.shared
     
     var body: some View {
-        NavigationView {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    // Header with filter tabs
-                    NotificationCenterHeaderView(
-                        selectedFilter: $viewModel.selectedFilter,
-                        viewModel: viewModel
-                    )
-                    
-                    // Task list
-                    let _ = print("🔍 Main view conditions - isLoading: \(viewModel.isLoading), hasTasks: \(viewModel.hasTasks), hasFilteredTasks: \(viewModel.hasFilteredTasks)")
-                    if viewModel.isLoading {
-                        NotificationCenterLoadingView()
-                    } else if !viewModel.hasTasks {
-                        EmptyStateView()
-                    } else if !viewModel.hasFilteredTasks {
-                        EmptyFilterStateView(filter: viewModel.selectedFilter)
-                    } else {
-                        NotificationCenterTaskListView(
-                            tasks: viewModel.filteredTasks,
-                            onTaskTapped: { task in
-                                selectedTask = task
-                                showingTaskEdit = true
-                            },
-                            onTaskStatusChanged: { task, newStatus in
-                                Task {
-                                    await viewModel.updateTaskStatus(task.task.id, status: newStatus)
-                                    // Post notification to refresh dashboard count
-                                    NotificationCenter.default.post(name: Notification.Name.refreshTaskCount, object: nil)
-                                }
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                // Header with filter tabs
+                NotificationCenterHeaderView(
+                    selectedFilter: $viewModel.selectedFilter,
+                    viewModel: viewModel
+                )
+                
+                // Task list
+                let _ = print("🔍 Main view conditions - isLoading: \(viewModel.isLoading), hasTasks: \(viewModel.hasTasks), hasFilteredTasks: \(viewModel.hasFilteredTasks)")
+                if viewModel.isLoading {
+                    NotificationCenterLoadingView()
+                } else if !viewModel.hasTasks {
+                    EmptyStateView()
+                } else if !viewModel.hasFilteredTasks {
+                    EmptyFilterStateView(filter: viewModel.selectedFilter)
+                } else {
+                    NotificationCenterTaskListView(
+                        tasks: viewModel.filteredTasks,
+                        onTaskTapped: { task in
+                            handleTaskTap(task)
+                        },
+                        onTaskStatusChanged: { task, newStatus in
+                            Task {
+                                await viewModel.updateTaskStatus(task.task.id, status: newStatus)
+                                // Post notification to refresh dashboard count
+                                NotificationCenter.default.post(name: Notification.Name.refreshTaskCount, object: nil)
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
-            .background(Color.white)
-            .navigationTitle("My Tasks")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(
-                leading: Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(Color(hex: "#401B17")!)
-                },
-                trailing: Button(action: {
+        }
+        .background(Color.white)
+        .navigationTitle("My Tasks")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
                     Task {
                         await viewModel.refreshTasks()
                     }
@@ -66,7 +62,7 @@ struct NotificationCenterView: View {
                         .foregroundColor(Color(hex: "#401B17")!)
                 }
                 .disabled(viewModel.isLoading)
-            )
+            }
         }
         .sheet(isPresented: $showingTaskEdit) {
             if let task = selectedTask {
@@ -84,6 +80,57 @@ struct NotificationCenterView: View {
             Task {
                 await viewModel.loadTasks()
             }
+        }
+        .background(
+            NavigationLink(
+                destination: gameToRecord.map { game in
+                    RecordGameAnswersView(
+                        game: game,
+                        onGameUpdated: {
+                            // Refresh tasks after recording
+                            Task {
+                                await viewModel.loadTasks()
+                            }
+                        }
+                    )
+                },
+                isActive: $showingRecordMode,
+                label: { EmptyView() }
+            )
+        )
+    }
+    
+    // MARK: - Task Tap Handling
+    
+    private func handleTaskTap(_ taskContext: TaskWithPartyContext) {
+        let task = taskContext.task
+        
+        // Check if this is a game recording task
+        if task.isGameRecordingTask, let gameId = task.gameId {
+            print("🎯 Game recording task tapped - loading game for record mode: \(gameId)")
+            
+            // Fetch the game and navigate directly to record mode
+            Task {
+                do {
+                    if let game = try await gamesService.fetchGame(id: gameId.uuidString) {
+                        await MainActor.run {
+                            print("✅ Game loaded successfully: \(game.title)")
+                            self.gameToRecord = game
+                            print("🎯 Setting showingRecordMode to true")
+                            self.showingRecordMode = true
+                            print("🎯 showingRecordMode is now: \(self.showingRecordMode)")
+                        }
+                    } else {
+                        print("❌ Game not found for id: \(gameId)")
+                    }
+                } catch {
+                    print("❌ Error fetching game: \(error)")
+                }
+            }
+        } else {
+            // Regular task - show edit view
+            selectedTask = taskContext
+            showingTaskEdit = true
         }
     }
 }

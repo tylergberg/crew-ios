@@ -10,6 +10,7 @@ struct GameBuilderView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingAddCustomQuestion = false
     @State private var showingAddFromTemplates = false
+    @State private var showingGameSettings = false
     
     var body: some View {
         NavigationView {
@@ -30,16 +31,30 @@ struct GameBuilderView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        Task {
-                            await builderStore.saveGame()
-                            // Call the callback to notify parent that game was saved
-                            onGameSaved?()
-                            dismiss()
+                    HStack(spacing: 16) {
+                        // Settings Button
+                        if gameId != nil { // Only show settings for existing games
+                            Button(action: {
+                                showingGameSettings = true
+                            }) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(Color(hex: "#401B17")!)
+                            }
                         }
+                        
+                        // Save Button
+                        Button("Save") {
+                            Task {
+                                await builderStore.saveGame()
+                                // Call the callback to notify parent that game was saved
+                                onGameSaved?()
+                                dismiss()
+                            }
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(builderStore.questions.isEmpty || builderStore.isLoading)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(builderStore.questions.isEmpty || builderStore.isLoading)
                 }
             }
         }
@@ -78,6 +93,19 @@ struct GameBuilderView: View {
                 },
                 game: createTemporaryGame()
             )
+        }
+        .sheet(isPresented: $showingGameSettings) {
+            if let gameId = gameId, 
+               let currentGame = builderStore.currentGame {
+                GameSettingsView(
+                    game: currentGame,
+                    partyId: partyId,
+                    onGameUpdated: { updatedGame in
+                        // Refresh the game data in the builder
+                        builderStore.loadExistingGame(gameId: gameId)
+                    }
+                )
+            }
         }
     }
     
@@ -195,6 +223,8 @@ struct GameBuilderView: View {
         QuestionCard(
             question: question,
             index: index,
+            video: builderStore.videos[question.id],
+            game: builderStore.currentGame ?? createTemporaryGame(),
             onUpdate: { updatedQuestion in
                 builderStore.updateQuestion(updatedQuestion)
             },
@@ -243,6 +273,8 @@ struct GameBuilderView: View {
 struct QuestionCard: View {
     let question: GameQuestion
     let index: Int
+    let video: GameVideo?
+    let game: PartyGame?
     let onUpdate: (GameQuestion) -> Void
     let onDelete: () -> Void
     let onMoveUp: (() -> Void)?
@@ -251,6 +283,7 @@ struct QuestionCard: View {
     @State private var isEditing = false
     @State private var editedText = ""
     @State private var editedPlannerNote = ""
+    @State private var showingVideoPreview = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -261,6 +294,18 @@ struct QuestionCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .fullScreenCover(isPresented: $showingVideoPreview) {
+            if let video = video, let game = game {
+                VideoPreviewView(
+                    question: question,
+                    video: video,
+                    game: game,
+                    onClose: {
+                        showingVideoPreview = false
+                    }
+                )
+            }
+        }
     }
     
     // MARK: - Question Header
@@ -275,9 +320,38 @@ struct QuestionCard: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(6)
             
+            // Recording Status Badge
+            if let video = video {
+                HStack(spacing: 4) {
+                    Image(systemName: "video.fill")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                    Text("Recorded")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.green)
+                .cornerRadius(4)
+            }
+            
             Spacer()
             
             HStack(spacing: 8) {
+                // Video Preview Button (only if video exists)
+                if let video = video {
+                    Button(action: {
+                        showingVideoPreview = true
+                    }) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
                 Menu {
                     Button(action: {
                         editedText = question.text

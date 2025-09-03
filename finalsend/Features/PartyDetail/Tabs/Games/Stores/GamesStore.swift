@@ -40,7 +40,7 @@ class GamesStore: ObservableObject {
     }
     
     /// Create a new game
-    func createGame(title: String, gameType: GameType = .newlywed) async -> Bool {
+    func createGame(title: String, recorderName: String? = nil, livePlayerName: String? = nil, gameType: GameType = .newlywed) async -> Bool {
         isLoading = true
         error = nil
         
@@ -51,7 +51,42 @@ class GamesStore: ObservableObject {
                 gameType: gameType
             )
             
-            games.insert(newGame, at: 0)
+            // If names were provided, update the game with the names
+            if let recorderName = recorderName, let livePlayerName = livePlayerName {
+                _ = try await gamesService.updateGameQuestions(
+                    gameId: newGame.id.uuidString,
+                    questions: newGame.questions,
+                    recorderName: recorderName,
+                    livePlayerName: livePlayerName
+                )
+                
+                // Create updated game object with names
+                let updatedGame = PartyGame(
+                    id: newGame.id,
+                    partyId: newGame.partyId,
+                    createdBy: newGame.createdBy,
+                    gameType: newGame.gameType,
+                    title: newGame.title,
+                    recorderName: recorderName,
+                    recorderPhone: newGame.recorderPhone,
+                    livePlayerName: livePlayerName,
+                    questions: newGame.questions,
+                    answers: newGame.answers,
+                    videos: newGame.videos,
+                    status: newGame.status,
+                    createdAt: newGame.createdAt,
+                    updatedAt: Date(),
+                    questionLockStatus: newGame.questionLockStatus,
+                    questionVersion: newGame.questionVersion,
+                    lockedAt: newGame.lockedAt,
+                    recordingSettings: newGame.recordingSettings,
+                    respondentProgress: newGame.respondentProgress
+                )
+                games.insert(updatedGame, at: 0)
+            } else {
+                games.insert(newGame, at: 0)
+            }
+            
             selectedTab = .myGames
             
             isLoading = false

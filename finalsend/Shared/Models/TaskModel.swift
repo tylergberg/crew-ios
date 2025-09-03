@@ -24,7 +24,7 @@ struct UserProfileResponse: Codable {
     let full_name: String?
 }
 
-struct TaskModel: Identifiable, Codable, Equatable {
+struct TaskModel: Identifiable, Codable {
     let id: UUID
     let partyId: UUID
     var title: String
@@ -36,10 +36,18 @@ struct TaskModel: Identifiable, Codable, Equatable {
     var createdBy: UUID
     var createdAt: Date
     var updatedAt: Date
+    var taskType: String?
+    var gameId: UUID?
+    var metadata: [String: Any]?
     
     // User display names
     var assignedToName: String?
     var createdByName: String?
+    
+    // Computed properties for recording tasks
+    var isGameRecordingTask: Bool {
+        taskType == "game_recording"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -53,6 +61,69 @@ struct TaskModel: Identifiable, Codable, Equatable {
         case createdBy = "created_by"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case taskType = "task_type"
+        case gameId = "game_id"
+        case metadata
+    }
+    
+    // Custom Codable implementation to handle metadata
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(UUID.self, forKey: .id)
+        partyId = try container.decode(UUID.self, forKey: .partyId)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        assignedTo = try container.decodeIfPresent(UUID.self, forKey: .assignedTo)
+        status = try container.decode(TaskStatus.self, forKey: .status)
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        completed = try container.decode(Bool.self, forKey: .completed)
+        createdBy = try container.decode(UUID.self, forKey: .createdBy)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        taskType = try container.decodeIfPresent(String.self, forKey: .taskType)
+        gameId = try container.decodeIfPresent(UUID.self, forKey: .gameId)
+        
+        // Handle metadata - it might be a string or dictionary
+        if let metadataString = try? container.decode(String.self, forKey: .metadata) {
+            if let data = metadataString.data(using: .utf8) {
+                metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            } else {
+                metadata = nil
+            }
+        } else {
+            metadata = nil
+        }
+        
+        // Initialize display names
+        assignedToName = nil
+        createdByName = nil
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(id, forKey: .id)
+        try container.encode(partyId, forKey: .partyId)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(assignedTo, forKey: .assignedTo)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(dueDate, forKey: .dueDate)
+        try container.encode(completed, forKey: .completed)
+        try container.encode(createdBy, forKey: .createdBy)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(taskType, forKey: .taskType)
+        try container.encodeIfPresent(gameId, forKey: .gameId)
+        
+        // Encode metadata as JSON string
+        if let metadata = metadata {
+            if let data = try? JSONSerialization.data(withJSONObject: metadata),
+               let string = String(data: data, encoding: .utf8) {
+                try container.encode(string, forKey: .metadata)
+            }
+        }
     }
     
     // Regular initializer for creating new tasks
@@ -67,7 +138,10 @@ struct TaskModel: Identifiable, Codable, Equatable {
         completed: Bool = false,
         createdBy: UUID,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        taskType: String? = nil,
+        gameId: UUID? = nil,
+        metadata: [String: Any]? = nil
     ) {
         self.id = id
         self.partyId = partyId
@@ -80,6 +154,9 @@ struct TaskModel: Identifiable, Codable, Equatable {
         self.createdBy = createdBy
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.taskType = taskType
+        self.gameId = gameId
+        self.metadata = metadata
         
         // Initialize user names as nil for regular initializer
         self.assignedToName = nil

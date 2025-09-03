@@ -17,13 +17,51 @@ struct RecordGameAnswersView: View {
     @State private var recordingQuestion: GameQuestion?
     @State private var showingVideoReview = false
     @State private var localGame: PartyGame
+    @State private var refreshTrigger = UUID() // Force UI refresh when needed
     
     private let gamesService = PartyGamesService.shared
     
     init(game: PartyGame, onGameUpdated: @escaping () -> Void) {
         self.game = game
         self.onGameUpdated = onGameUpdated
-        self._localGame = State(initialValue: game)
+        
+        // Process questions to replace placeholders for recording
+        let processedQuestions = game.questions.map { question in
+            GameQuestion(
+                id: question.id,
+                text: PlaceholderReplacer.replacePlaceholders(in: question.text, using: game),
+                category: question.category,
+                isCustom: question.isCustom,
+                plannerNote: question.plannerNote,
+                questionForRecorder: PlaceholderReplacer.replacePlaceholders(in: question.questionForRecorder, using: game),
+                questionForLiveGuest: PlaceholderReplacer.replacePlaceholders(in: question.questionForLiveGuest, using: game)
+            )
+        }
+        
+        // Create game with processed questions
+        let processedGame = PartyGame(
+            id: game.id,
+            partyId: game.partyId,
+            createdBy: game.createdBy,
+            gameType: game.gameType,
+            title: game.title,
+            recorderName: game.recorderName,
+            recorderPhone: game.recorderPhone,
+            livePlayerName: game.livePlayerName,
+            questions: processedQuestions,
+            answers: game.answers,
+            videos: game.videos,
+            status: game.status,
+            createdAt: game.createdAt,
+            updatedAt: game.updatedAt,
+            questionLockStatus: game.questionLockStatus,
+            questionVersion: game.questionVersion,
+            lockedAt: game.lockedAt,
+            recordingSettings: game.recordingSettings,
+            respondentProgress: game.respondentProgress
+        )
+        
+        self._localGame = State(initialValue: processedGame)
     }
 
 
@@ -48,6 +86,7 @@ struct RecordGameAnswersView: View {
             
             Spacer()
         }
+        .id(refreshTrigger) // Force view refresh when trigger changes
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Record Answers")
         .navigationBarTitleDisplayMode(.inline)
@@ -95,6 +134,7 @@ struct RecordGameAnswersView: View {
                 VideoPlaybackView(
                     question: question,
                     video: video,
+                    game: localGame,
                     onReRecord: {
                         if hasRequiredPermissions {
                             showingVideoPlayback = nil
@@ -116,7 +156,9 @@ struct RecordGameAnswersView: View {
                 )
             }
         }
+
         .background(
+            // Navigation to Video Recording
             NavigationLink(
                 destination: selectedQuestionForRecording.map { question in
                     VideoRecordingView(
@@ -138,8 +180,18 @@ struct RecordGameAnswersView: View {
                     }
                 },
                 isActive: Binding(
-                    get: { selectedQuestionForRecording != nil },
-                    set: { if !$0 { selectedQuestionForRecording = nil } }
+                    get: { 
+                        let isActive = selectedQuestionForRecording != nil
+                        print("🎯 NavigationLink isActive GET: \(isActive), question: \(selectedQuestionForRecording?.text ?? "nil")")
+                        return isActive
+                    },
+                    set: { newValue in
+                        print("🎯 NavigationLink isActive SET: \(newValue)")
+                        if !newValue { 
+                            print("🎯 NavigationLink clearing selectedQuestionForRecording")
+                            selectedQuestionForRecording = nil 
+                        }
+                    }
                 )
             ) {
                 EmptyView()
@@ -154,21 +206,43 @@ struct RecordGameAnswersView: View {
                     game: localGame,
                     onSave: { video in
                         print("🎬 RecordGameAnswersView: User confirmed save, uploading video...")
+                        print("🎬 Before save - selectedQuestionForRecording: \(selectedQuestionForRecording?.text ?? "nil")")
+                        print("🎬 Before save - showingVideoReview: \(showingVideoReview)")
+                        
+                        // Guard against multiple saves or race conditions
+                        guard let questionBeingSaved = recordingQuestion else {
+                            print("🎬 RecordGameAnswersView: Save called but recordingQuestion is nil, ignoring")
+                            return
+                        }
+                        
+                        // Dismiss the fullScreenCover immediately
                         showingVideoReview = false
                         recordedVideoURL = nil
                         recordingQuestion = nil
                         
+                        // Process video after dismissing the modal
                         Task {
-                            await handleVideoRecorded(video: video, for: question)
+                            await handleVideoRecorded(video: video, for: questionBeingSaved)
+                            
+                            // Only clear the NavigationLink after video processing is complete
+                            await MainActor.run {
+                                selectedQuestionForRecording = nil
+                                print("🎬 After save - selectedQuestionForRecording: \(selectedQuestionForRecording?.text ?? "nil")")
+                                print("🎬 All navigation states cleared, should return to Record Answers List")
+                            }
                         }
                     },
                     onRetake: {
                         print("🎬 RecordGameAnswersView: User wants to retake")
+                        guard let questionToRetake = recordingQuestion else {
+                            print("🎬 RecordGameAnswersView: Retake called but recordingQuestion is nil, ignoring")
+                            return
+                        }
                         showingVideoReview = false
                         recordedVideoURL = nil
                         recordingQuestion = nil
                         // Restart recording for the same question
-                        startRecordingPreflight(for: question)
+                        startRecordingPreflight(for: questionToRetake)
                     }
                 )
             }
@@ -531,6 +605,7 @@ struct RecordGameAnswersView: View {
                 gameType: localGame.gameType,
                 title: localGame.title,
                 recorderName: localGame.recorderName,
+                recorderPhone: localGame.recorderPhone,
                 livePlayerName: localGame.livePlayerName,
                 questions: localGame.questions,
                 answers: localGame.answers,
@@ -546,9 +621,16 @@ struct RecordGameAnswersView: View {
             )
             
             print("🔄 RecordGameAnswersView: Updated local game with video data")
+            print("🔄 RecordGameAnswersView: Videos now: \(localGame.videos.keys.sorted())")
             
-            // Call the callback to refresh the parent view
-            onGameUpdated()
+            // Force UI refresh by updating the refresh trigger
+            refreshTrigger = UUID()
+            
+            // Force UI update by updating the state in the next runloop
+            DispatchQueue.main.async {
+                // Call the callback to refresh the parent view
+                onGameUpdated()
+            }
             
             // Clear the selected question to navigate back
             selectedQuestionForRecording = nil
@@ -571,7 +653,48 @@ struct RecordGameAnswersView: View {
             // Fetch the latest game data from the server
             if let updatedGame = try await gamesService.fetchGame(id: localGame.id.uuidString) {
                 print("✅ RecordGameAnswersView: Fetched updated game with \(updatedGame.videos.count) videos")
-                localGame = updatedGame
+                
+                // Process questions to replace placeholders (same as init)
+                let processedQuestions = updatedGame.questions.map { question in
+                    GameQuestion(
+                        id: question.id,
+                        text: PlaceholderReplacer.replacePlaceholders(in: question.text, using: updatedGame),
+                        category: question.category,
+                        isCustom: question.isCustom,
+                        plannerNote: question.plannerNote,
+                        questionForRecorder: PlaceholderReplacer.replacePlaceholders(in: question.questionForRecorder, using: updatedGame),
+                        questionForLiveGuest: PlaceholderReplacer.replacePlaceholders(in: question.questionForLiveGuest, using: updatedGame)
+                    )
+                }
+                
+                // Create game with processed questions
+                localGame = PartyGame(
+                    id: updatedGame.id,
+                    partyId: updatedGame.partyId,
+                    createdBy: updatedGame.createdBy,
+                    gameType: updatedGame.gameType,
+                    title: updatedGame.title,
+                    recorderName: updatedGame.recorderName,
+                    recorderPhone: updatedGame.recorderPhone,
+                    livePlayerName: updatedGame.livePlayerName,
+                    questions: processedQuestions,
+                    answers: updatedGame.answers,
+                    videos: updatedGame.videos,
+                    status: updatedGame.status,
+                    createdAt: updatedGame.createdAt,
+                    updatedAt: updatedGame.updatedAt,
+                    questionLockStatus: updatedGame.questionLockStatus,
+                    questionVersion: updatedGame.questionVersion,
+                    lockedAt: updatedGame.lockedAt,
+                    recordingSettings: updatedGame.recordingSettings,
+                    respondentProgress: updatedGame.respondentProgress
+                )
+                
+                print("🔄 RecordGameAnswersView: Updated localGame with processed questions and \(localGame.videos.count) videos")
+                
+                // Force UI refresh by updating the refresh trigger
+                refreshTrigger = UUID()
+                
             } else {
                 print("⚠️ RecordGameAnswersView: No game found with id \(localGame.id.uuidString)")
             }
@@ -583,8 +706,6 @@ struct RecordGameAnswersView: View {
             print("❌ RecordGameAnswersView: Error refreshing game data: \(error)")
         }
     }
-
-}
 
 // MARK: - Question Status Card
 struct QuestionStatusCard: View {
@@ -725,4 +846,5 @@ struct QuestionStatusCard: View {
             print("Game updated in preview")
         }
     )
+}
 }

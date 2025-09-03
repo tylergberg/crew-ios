@@ -4,10 +4,12 @@ import SwiftUI
 @MainActor
 class GameBuilderStore: ObservableObject {
     @Published var questions: [GameQuestion] = []
+    @Published var videos: [String: GameVideo] = [:]
     @Published var recorderName: String = ""
     @Published var livePlayerName: String = ""
     @Published var isLoading = false
     @Published var error: String?
+    @Published var currentGame: PartyGame?
     
     private let gamesService = PartyGamesService.shared
     private var gameId: String?
@@ -18,36 +20,58 @@ class GameBuilderStore: ObservableObject {
         print("📝 Initial questions count: \(questions.count)")
     }
     
+    // MARK: - Helper Functions
+    
+    private func replacePlaceholders(in text: String) -> String {
+        return PlaceholderReplacer.replacePlaceholders(
+            in: text,
+            recorderName: recorderName,
+            livePlayerName: livePlayerName
+        )
+    }
+    
     func addCustomQuestion(text: String, plannerNote: String) {
         print("🔄 addCustomQuestion called with text: \(text)")
+        
+        // Replace placeholders with actual names
+        let processedText = replacePlaceholders(in: text)
+        let processedRecorderText = replacePlaceholders(in: text)
+        let processedLiveGuestText = replacePlaceholders(in: "What does your partner say about: \(text)")
+        
         let newQuestion = GameQuestion(
             id: UUID().uuidString,
-            text: text,
+            text: processedText,
             category: "relationship_romance",
             isCustom: true,
             plannerNote: plannerNote.isEmpty ? nil : plannerNote,
-            questionForRecorder: text,
-            questionForLiveGuest: "What does your partner say about: \(text)"
+            questionForRecorder: processedRecorderText,
+            questionForLiveGuest: processedLiveGuestText
         )
         
         questions.append(newQuestion)
-        print("✅ Added custom question. New count: \(questions.count)")
+        print("✅ Added custom question with replaced placeholders. New count: \(questions.count)")
     }
     
     func addTemplateQuestion(text: String, plannerNote: String) {
         print("🔄 addTemplateQuestion called with text: \(text)")
+        
+        // Replace placeholders with actual names
+        let processedText = replacePlaceholders(in: text)
+        let processedRecorderText = replacePlaceholders(in: text)
+        let processedLiveGuestText = replacePlaceholders(in: "What does your partner say about: \(text)")
+        
         let templateQuestion = GameQuestion(
             id: UUID().uuidString,
-            text: text,
+            text: processedText,
             category: "relationship_romance",
             isCustom: false,
             plannerNote: plannerNote.isEmpty ? nil : plannerNote,
-            questionForRecorder: text,
-            questionForLiveGuest: "What does your partner say about: \(text)"
+            questionForRecorder: processedRecorderText,
+            questionForLiveGuest: processedLiveGuestText
         )
         
         questions.append(templateQuestion)
-        print("✅ Added template question. New count: \(questions.count)")
+        print("✅ Added template question with replaced placeholders. New count: \(questions.count)")
     }
     
     func removeQuestion(id: String) {
@@ -104,13 +128,29 @@ class GameBuilderStore: ObservableObject {
                     print("📝 Questions: \(game.questions)")
                     
                     await MainActor.run {
-                        self.questions = game.questions
+                        self.currentGame = game // Store the full game object
                         self.recorderName = game.recorderName ?? ""
                         self.livePlayerName = game.livePlayerName ?? ""
+                        
+                        // Process existing questions to replace placeholders
+                        self.questions = game.questions.map { question in
+                            GameQuestion(
+                                id: question.id,
+                                text: self.replacePlaceholders(in: question.text),
+                                category: question.category,
+                                isCustom: question.isCustom,
+                                plannerNote: question.plannerNote,
+                                questionForRecorder: self.replacePlaceholders(in: question.questionForRecorder),
+                                questionForLiveGuest: self.replacePlaceholders(in: question.questionForLiveGuest)
+                            )
+                        }
+                        
+                        self.videos = game.videos
                         self.isLoading = false
                         print("🔄 Updated questions array: \(self.questions.count) questions")
+                        print("🎥 Loaded videos: \(self.videos.count) videos")
                         print("📝 Recorder: \(self.recorderName), Live Player: \(self.livePlayerName)")
-                        print("✅ Loading completed successfully")
+                        print("✅ Loading completed successfully with placeholder replacement")
                     }
                 } else {
                     print("❌ Game not found")

@@ -196,10 +196,6 @@ struct MyGamesView: View {
                                     gameToEdit = game
                                     
                                     print("🎯 [MyGamesView] gameToEdit: \(gameToEdit?.title ?? "nil")")
-                                },
-                                onEnterRecordMode: {
-                                    print("🎯 [MyGamesView] Enter Record Mode tapped for game: \(game.title)")
-                                    gameToRecord = game
                                 }
                             )
                             .padding(.horizontal, 20)
@@ -227,6 +223,7 @@ struct MyGamesView: View {
                 }
             )
         }
+
         .background(
             NavigationLink(
                 destination: gameToRecord.map { game in
@@ -265,6 +262,20 @@ struct MyGamesView: View {
                 }
             }
         )
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenGameRecording"))) { notification in
+            if let gameIdString = notification.userInfo?["gameId"] as? String,
+               let gameId = UUID(uuidString: gameIdString) {
+                print("🎯 [MyGamesView] Received OpenGameRecording notification for game: \(gameId)")
+                
+                // Find the game and trigger recording
+                if let game = gamesStore.games.first(where: { $0.id == gameId }) {
+                    print("🎯 [MyGamesView] Found game for recording: \(game.title)")
+                    gameToRecord = game
+                } else {
+                    print("❌ [MyGamesView] Game not found for recording: \(gameId)")
+                }
+            }
+        }
     }
 }
 
@@ -273,7 +284,6 @@ struct MyGameCard: View {
     let game: PartyGame
     let onDelete: () -> Void
     let onEnterBuilder: () -> Void
-    let onEnterRecordMode: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -367,16 +377,7 @@ struct MyGameCard: View {
                 .background(Color.blue)
                 .cornerRadius(10)
                 
-                Button("Record Mode") {
-                    onEnterRecordMode()
-                }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.orange)
-                .cornerRadius(10)
+
                 
                 Button("Play Game") {
                     // TODO: Hook up game play functionality

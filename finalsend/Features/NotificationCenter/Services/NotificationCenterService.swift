@@ -1,6 +1,62 @@
 import Foundation
 import Supabase
 
+// Helper for decoding Any types
+struct AnyCodable: Codable {
+    let value: Any
+    
+    init(_ value: Any) {
+        self.value = value
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if container.decodeNil() {
+            value = NSNull()
+        } else if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            value = array.map { $0.value }
+        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
+            value = dictionary.mapValues { $0.value }
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode value")
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch value {
+        case is NSNull:
+            try container.encodeNil()
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let dictionary as [String: Any]:
+            try container.encode(dictionary.mapValues { AnyCodable($0) })
+        default:
+            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: encoder.codingPath, debugDescription: "Cannot encode value"))
+        }
+    }
+}
+
+
+
 @MainActor
 class NotificationCenterService: ObservableObject {
     private let client = SupabaseManager.shared.client
@@ -117,6 +173,9 @@ struct TaskWithPartyResponse: Codable {
     let createdBy: UUID
     let createdAt: Date
     let updatedAt: Date
+    let taskType: String?
+    let gameId: UUID?
+    let metadata: [String: Any]?
     
     // Joined party data
     let parties: PartyData?
@@ -155,7 +214,83 @@ struct TaskWithPartyResponse: Codable {
         case createdAt = "created_at"
         case createdBy = "created_by"
         case updatedAt = "updated_at"
+        case taskType = "task_type"
+        case gameId = "game_id"
+        case metadata
         case parties, creator
+    }
+    
+    // Custom decoding to handle metadata as either dictionary or string
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(UUID.self, forKey: .id)
+        partyId = try container.decode(UUID.self, forKey: .partyId)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        assignedTo = try container.decodeIfPresent(UUID.self, forKey: .assignedTo)
+        status = try container.decode(String.self, forKey: .status)
+        dueDate = try container.decodeIfPresent(String.self, forKey: .dueDate)
+        completed = try container.decode(Bool.self, forKey: .completed)
+        createdBy = try container.decode(UUID.self, forKey: .createdBy)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        taskType = try container.decodeIfPresent(String.self, forKey: .taskType)
+        gameId = try container.decodeIfPresent(UUID.self, forKey: .gameId)
+        parties = try container.decodeIfPresent(PartyData.self, forKey: .parties)
+        creator = try container.decodeIfPresent(CreatorData.self, forKey: .creator)
+        
+        // Handle metadata - decode as Any first, then process
+        do {
+            if let metadataValue = try container.decodeIfPresent(AnyCodable.self, forKey: .metadata) {
+                if let dict = metadataValue.value as? [String: Any] {
+                    metadata = dict
+                } else if let string = metadataValue.value as? String {
+                    // Parse JSON string to dictionary
+                    if let data = string.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        metadata = parsed
+                    } else {
+                        metadata = nil
+                    }
+                } else {
+                    metadata = nil
+                }
+            } else {
+                metadata = nil
+            }
+        } catch {
+            metadata = nil
+        }
+    }
+    
+    // Custom encoding - encode metadata as JSON string
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(id, forKey: .id)
+        try container.encode(partyId, forKey: .partyId)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(assignedTo, forKey: .assignedTo)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(dueDate, forKey: .dueDate)
+        try container.encode(completed, forKey: .completed)
+        try container.encode(createdBy, forKey: .createdBy)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(taskType, forKey: .taskType)
+        try container.encodeIfPresent(gameId, forKey: .gameId)
+        try container.encodeIfPresent(parties, forKey: .parties)
+        try container.encodeIfPresent(creator, forKey: .creator)
+        
+        // Encode metadata as JSON string
+        if let metadata = metadata {
+            if let data = try? JSONSerialization.data(withJSONObject: metadata),
+               let string = String(data: data, encoding: .utf8) {
+                try container.encode(string, forKey: .metadata)
+            }
+        }
     }
     
     // Computed properties for easier access
@@ -256,6 +391,10 @@ struct TaskWithPartyContext: Identifiable, Codable {
     init(from response: TaskWithPartyResponse) {
         self.id = response.id
         print("🔍 Creating TaskWithPartyContext for task: \(response.title), status: \(response.status)")
+        
+        // Metadata is already parsed in TaskWithPartyResponse
+        let parsedMetadata = response.metadata
+        
         self.task = TaskModel(
             id: response.id,
             partyId: response.partyId,
@@ -267,7 +406,10 @@ struct TaskWithPartyContext: Identifiable, Codable {
             completed: response.completed,
             createdBy: response.createdBy,
             createdAt: response.createdAt,
-            updatedAt: response.updatedAt
+            updatedAt: response.updatedAt,
+            taskType: response.taskType,
+            gameId: response.gameId,
+            metadata: parsedMetadata
         )
         self.party = PartySummary(
             id: response.partyId,
