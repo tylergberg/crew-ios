@@ -115,7 +115,7 @@ struct RespondentProgress: Codable, Equatable {
 }
 
 // MARK: - Main Party Game Model
-struct PartyGame: Identifiable, Codable, Equatable {
+struct PartyGame: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     let partyId: UUID
     let createdBy: UUID
@@ -289,10 +289,19 @@ struct PartyGame: Identifiable, Codable, Equatable {
             respondentProgress = try container.decodeIfPresent([String: RespondentProgress].self, forKey: .respondentProgress)
         }
     }
+    
+    // MARK: - Hashable implementation
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: PartyGame, rhs: PartyGame) -> Bool {
+        return lhs.id == rhs.id
+    }
 }
 
 // MARK: - Game Question
-struct GameQuestion: Identifiable, Codable, Equatable {
+struct GameQuestion: Identifiable, Codable, Equatable, Hashable {
     let id: String
     let text: String
     let category: String

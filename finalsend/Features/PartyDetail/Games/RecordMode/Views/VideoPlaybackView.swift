@@ -9,6 +9,9 @@ struct VideoPlaybackView: View {
     
     @State private var player: AVPlayer?
     @State private var isPlaying = false
+    @State private var isLoading = true
+    @State private var hasError = false
+    @State private var errorMessage = ""
     
     var body: some View {
         ZStack {
@@ -37,8 +40,6 @@ struct VideoPlaybackView: View {
         }
     }
     
-
-    
     // MARK: - Question View
     private var questionView: some View {
         Text(question.text)
@@ -53,7 +54,47 @@ struct VideoPlaybackView: View {
     // MARK: - Video Player View
     private var videoPlayerView: some View {
         VStack(spacing: 16) {
-            if let player = player {
+            if hasError {
+                // Error State
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    
+                    Text("Video Loading Error")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text(errorMessage)
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    
+                    Button("Retry") {
+                        setupVideoPlayer()
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                }
+                .frame(height: 300)
+            } else if isLoading {
+                // Loading State
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                    
+                    Text("Loading video...")
+                        .font(.body)
+                        .foregroundColor(.white)
+                }
+                .frame(height: 300)
+            } else if let player = player {
+                // Video Player
                 VideoPlayer(player: player)
                     .aspectRatio(9/16, contentMode: .fit)
                     .cornerRadius(12)
@@ -88,25 +129,13 @@ struct VideoPlaybackView: View {
                             .foregroundColor(.white)
                     }
                 }
-            } else {
-                // Loading or Error State
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.white)
-                    
-                    Text("Loading video...")
-                        .font(.body)
-                        .foregroundColor(.white)
-                }
-                .frame(height: 300)
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 40)
     }
     
-        // MARK: - Action Buttons View
+    // MARK: - Action Buttons View
     private var actionButtonsView: some View {
         HStack(spacing: 16) {
             // Re-record Button
@@ -140,12 +169,23 @@ struct VideoPlaybackView: View {
     
     // MARK: - Video Player Methods
     private func setupVideoPlayer() {
+        print("🎥 Setting up video player...")
+        
+        // Reset state
+        isLoading = true
+        hasError = false
+        errorMessage = ""
+        
+        // Validate URL
         guard let url = URL(string: video.videoUrl) else {
             print("❌ Invalid video URL: \(video.videoUrl)")
+            showError("Invalid video URL")
             return
         }
         
         print("🎥 Setting up video player with URL: \(url)")
+        
+        // Create player with timeout handling
         player = AVPlayer(url: url)
         
         // Add periodic time observer to track playback state
@@ -155,21 +195,47 @@ struct VideoPlaybackView: View {
             }
         }
         
-        // Start playing automatically
-        player?.play()
-        isPlaying = true
+        // Set timeout for loading
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+            if self.isLoading {
+                print("⚠️ Video loading timeout")
+                self.showError("Video loading timed out. Please check your connection and try again.")
+            }
+        }
+        
+        // Start playing automatically after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if let player = self.player {
+                player.play()
+                self.isPlaying = true
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func showError(_ message: String) {
+        DispatchQueue.main.async {
+            self.isLoading = false
+            self.hasError = true
+            self.errorMessage = message
+            print("❌ Video player error: \(message)")
+        }
     }
     
     private func cleanupVideoPlayer() {
         player?.pause()
         player = nil
+        isLoading = false
+        hasError = false
     }
     
     private func togglePlayback() {
+        guard let player = player else { return }
+        
         if isPlaying {
-            player?.pause()
+            player.pause()
         } else {
-            player?.play()
+            player.play()
         }
         isPlaying.toggle()
     }
@@ -220,3 +286,4 @@ struct VideoPlaybackView: View {
         }
     )
 }
+
