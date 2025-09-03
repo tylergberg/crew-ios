@@ -454,7 +454,7 @@ struct PartyHubView: View {
                 )
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                 
-                // Crew (summary row)
+                // Crew
                 FeaturePreviewCard(
                     title: "Crew",
                     subtitle: dataManager.isAttendeesLoading ? "Loading attendees…" : (dataManager.attendees.isEmpty ? "No attendees yet" : "\(dataManager.attendees.count) attendees"),
@@ -462,7 +462,15 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showCrewModal = true }
                 )
-                // RSVP (summary row)
+                // Chat
+                FeaturePreviewCard(
+                    title: "Chat",
+                    subtitle: "Group messages",
+                    icon: "bubble.circle.fill",
+                    color: Color.brandBlue,
+                    action: { showChatModal = true }
+                )
+                // RSVP
                 FeaturePreviewCard(
                     title: "RSVP",
                     subtitle: {
@@ -485,8 +493,7 @@ struct PartyHubView: View {
                         }
                     }
                 )
-                
-                // Party Type (summary row)
+                // Party Type
                 FeaturePreviewCard(
                     title: "Party Type",
                     subtitle: partyManager.partyType.isEmpty ? "Not specified" : partyManager.partyType,
@@ -494,31 +501,27 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showEditPartyTypeModal = true }
                 )
-                
-                // Tasks (summary row) - only visible for organizers and admins
-                if partyManager.isOrganizerOrAdmin {
-                    FeaturePreviewCard(
-                        title: "Tasks",
-                        subtitle: {
-                            if let tasksStore = dataManager.tasksStore {
-                                if tasksStore.isLoading {
-                                    return "Loading tasks..."
-                                } else if tasksStore.tasks.isEmpty {
-                                    return "No tasks yet"
-                                } else {
-                                    return "\(tasksStore.tasks.count) tasks"
-                                }
+                // Vibe
+                FeaturePreviewCard(
+                    title: "Vibe",
+                    subtitle: {
+                        if partyManager.vibeTags.isEmpty {
+                            return "Add trip vibe tags"
+                        } else {
+                            let displayTags = Array(partyManager.vibeTags.prefix(3))
+                            let remaining = partyManager.vibeTags.count - 3
+                            if remaining > 0 {
+                                return "\(displayTags.joined(separator: ", ")) +\(remaining) more"
                             } else {
-                                return "Manage party tasks & to-dos"
+                                return displayTags.joined(separator: ", ")
                             }
-                        }(),
-                        icon: "checkmark.circle.fill",
-                        color: Color.brandBlue,
-                        action: { showTasksModal = true }
-                    )
-                }
-                
-                // Dates (summary row)
+                        }
+                    }(),
+                    icon: "tag.circle.fill",
+                    color: Color.brandBlue,
+                    action: { showEditPartyVibeModal = true }
+                )
+                // Dates
                 FeaturePreviewCard(
                     title: "Dates",
                     subtitle: {
@@ -545,8 +548,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showEditDatesModal = true }
                 )
-                
-                // Feature placeholders – flat list
+                // Location
                 FeaturePreviewCard(
                     title: "Location",
                     subtitle: {
@@ -571,26 +573,45 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showEditLocationModal = true }
                 )
+                // Explore
                 FeaturePreviewCard(
-                    title: "Vibe",
-                    subtitle: {
-                        if partyManager.vibeTags.isEmpty {
-                            return "Add trip vibe tags"
-                        } else {
-                            let displayTags = Array(partyManager.vibeTags.prefix(3))
-                            let remaining = partyManager.vibeTags.count - 3
-                            if remaining > 0 {
-                                return "\(displayTags.joined(separator: ", ")) +\(remaining) more"
-                            } else {
-                                return displayTags.joined(separator: ", ")
-                            }
-                        }
-                    }(),
-                    icon: "tag.circle.fill",
+                    title: "Explore",
+                    subtitle: "Discover experiences & vendors",
+                    icon: "magnifyingglass.circle.fill",
                     color: Color.brandBlue,
-                    action: { showEditPartyVibeModal = true }
+                    action: { showVendorsModal = true }
                 )
-                
+                // AI
+                FeaturePreviewCard(
+                    title: "AI",
+                    subtitle: "Plan smarter with AI",
+                    icon: "lightbulb.circle.fill",
+                    color: Color.brandBlue,
+                    action: {}
+                )
+                // Tasks (only for organizers/admins)
+                if partyManager.isOrganizerOrAdmin {
+                    FeaturePreviewCard(
+                        title: "Tasks",
+                        subtitle: {
+                            if let tasksStore = dataManager.tasksStore {
+                                if tasksStore.isLoading {
+                                    return "Loading tasks..."
+                                } else if tasksStore.tasks.isEmpty {
+                                    return "No tasks yet"
+                                } else {
+                                    return "\(tasksStore.tasks.count) tasks"
+                                }
+                            } else {
+                                return "Manage party tasks & to-dos"
+                            }
+                        }(),
+                        icon: "checkmark.circle.fill",
+                        color: Color.brandBlue,
+                        action: { showTasksModal = true }
+                    )
+                }
+                // Itinerary
                 FeaturePreviewCard(
                     title: "Itinerary",
                     subtitle: "Plan events & schedule",
@@ -598,6 +619,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showItineraryModal = true }
                 )
+                // Transport
                 FeaturePreviewCard(
                     title: "Transport",
                     subtitle: "Flights & rides",
@@ -605,6 +627,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showTransportModal = true }
                 )
+                // Lodging
                 FeaturePreviewCard(
                     title: "Lodging",
                     subtitle: "Stay details & rooms",
@@ -612,6 +635,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showLodgingModal = true }
                 )
+                // Packing
                 FeaturePreviewCard(
                     title: "Packing",
                     subtitle: "Shared packing lists",
@@ -619,6 +643,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showPackingModal = true }
                 )
+                // Merch
                 FeaturePreviewCard(
                     title: "Merch",
                     subtitle: "Custom apparel & accessories",
@@ -626,6 +651,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showShopModal = true }
                 )
+                // Games
                 FeaturePreviewCard(
                     title: "Games",
                     subtitle: "Activities & icebreakers",
@@ -633,6 +659,7 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showGamesModal = true }
                 )
+                // Expenses
                 FeaturePreviewCard(
                     title: "Expenses",
                     subtitle: "Track spending & splits",
@@ -640,26 +667,13 @@ struct PartyHubView: View {
                     color: Color.brandBlue,
                     action: { showExpensesModal = true }
                 )
+                // Album
                 FeaturePreviewCard(
                     title: "Album",
                     subtitle: "Photos & memories",
                     icon: "photo.circle.fill",
                     color: Color.brandBlue,
                     action: { showGalleryModal = true }
-                )
-                FeaturePreviewCard(
-                    title: "AI Assistant",
-                    subtitle: "Plan smarter with AI",
-                    icon: "lightbulb.circle.fill",
-                    color: Color.brandBlue,
-                    action: {}
-                )
-                FeaturePreviewCard(
-                    title: "Chat",
-                    subtitle: "Group messages",
-                    icon: "bubble.circle.fill",
-                    color: Color.brandBlue,
-                    action: { showChatModal = true }
                 )
             }
             .padding(.horizontal, 24)

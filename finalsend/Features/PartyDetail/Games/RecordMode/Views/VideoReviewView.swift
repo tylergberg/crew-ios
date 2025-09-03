@@ -1,277 +1,181 @@
 import SwiftUI
 import AVKit
 
+/// View for reviewing recorded videos with playback controls and save/retake options
 struct VideoReviewView: View {
+    let videoURL: URL
     let question: GameQuestion
     let game: PartyGame
-    let videoURL: URL
-    let onUse: (GameVideo) -> Void
-    let onRedo: () -> Void
+    let onSave: (GameVideo) -> Void
+    let onRetake: () -> Void
     
-    @State private var player: AVPlayer?
-    @State private var isPlaying = false
-    @State private var recordingDuration: Double = 0
-    @State private var isUploading = false
+    @State private var player: AVPlayer
+    
+    init(videoURL: URL, question: GameQuestion, game: PartyGame, onSave: @escaping (GameVideo) -> Void, onRetake: @escaping () -> Void) {
+        self.videoURL = videoURL
+        self.question = question
+        self.game = game
+        self.onSave = onSave
+        self.onRetake = onRetake
+        self._player = State(initialValue: AVPlayer(url: videoURL))
+    }
     
     var body: some View {
         ZStack {
-            // Background
-            Color.black
-                .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             
-            VStack(spacing: 0) {
+            VStack(spacing: 20) {
+                // Header
+                Text("Video Review")
+                    .font(.title)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.top, 20)
+                
                 // Question
-                questionView
+                VStack(spacing: 8) {
+                    Text("Question")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    
+                    Text(question.text)
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                .padding(.bottom, 10)
                 
                 // Video Player
-                if isUploading {
-                    uploadingView
-                } else {
-                    videoPlayerView
-                }
+                VideoPlayer(player: player)
+                    .aspectRatio(3/4, contentMode: .fit)
+                    .cornerRadius(12)
+                    .padding(.horizontal, 20)
                 
                 Spacer()
                 
-                // Action Buttons
-                if !isUploading {
-                    actionButtonsView
+                // Controls
+                HStack(spacing: 50) {
+                    // Retake Button
+                    Button(action: {
+                        player.pause()
+                        onRetake()
+                    }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                            Text("Retake")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: 80)
+                    }
+                    
+                    // Play/Pause Button
+                    Button(action: {
+                        if player.timeControlStatus == .playing {
+                            player.pause()
+                        } else {
+                            player.play()
+                        }
+                    }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: player.timeControlStatus == .playing ? "pause.fill" : "play.fill")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                            Text(player.timeControlStatus == .playing ? "Pause" : "Play")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: 80)
+                    }
+                    
+                    // Save Button
+                    Button(action: {
+                        player.pause()
+                        saveVideo()
+                    }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "checkmark")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                            Text("Save")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.green)
+                        .frame(width: 80)
+                    }
                 }
+                .padding(.bottom, 50)
             }
         }
         .onAppear {
-            setupVideoPlayer()
+            print("🎬 VideoReviewView: onAppear - videoURL: \(videoURL)")
+            player.play()
         }
         .onDisappear {
-            cleanupVideoPlayer()
+            print("🎬 VideoReviewView: onDisappear")
+            player.pause()
         }
     }
     
-    // MARK: - Question View
-    private var questionView: some View {
-        Text(question.text)
-            .font(.title2)
-            .fontWeight(.medium)
-            .foregroundColor(.white)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 40)
-            .padding(.top, 60)
-    }
-    
-    // MARK: - Uploading View
-    private var uploadingView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.white)
-            
-            Text("Uploading video...")
-                .font(.title3)
-                .fontWeight(.medium)
-                .foregroundColor(.white)
-            
-            Text("Please wait while we save your answer")
-                .font(.body)
-                .foregroundColor(.white.opacity(0.8))
-        }
-        .frame(height: 300)
-    }
-    
-    // MARK: - Video Player View
-    private var videoPlayerView: some View {
-        VStack(spacing: 16) {
-            if let player = player {
-                VideoPlayer(player: player)
-                    .aspectRatio(9/16, contentMode: .fit)
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-                    .onTapGesture {
-                        togglePlayback()
-                    }
-                
-                // Playback Controls
-                HStack(spacing: 20) {
-                    Button(action: {
-                        seekBackward()
-                    }) {
-                        Image(systemName: "gobackward.10")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    
-                    Button(action: {
-                        togglePlayback()
-                    }) {
-                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundColor(.white)
-                    }
-                    
-                    Button(action: {
-                        seekForward()
-                    }) {
-                        Image(systemName: "goforward.10")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                }
-            } else {
-                // Loading State
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.white)
-                    
-                    Text("Loading video...")
-                        .font(.body)
-                        .foregroundColor(.white)
-                }
-                .frame(height: 300)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 40)
-    }
-    
-    // MARK: - Action Buttons View
-    private var actionButtonsView: some View {
-        HStack(spacing: 16) {
-            // REDO Button
-            Button(action: onRedo) {
-                Text("REDO")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 140)
-                    .padding(.vertical, 10)
-                    .background(Color(.systemGray))
-                    .cornerRadius(8)
-            }
-            
-            // USE Button
-            Button(action: {
-                isUploading = true
-                createAndSaveGameVideo()
-            }) {
-                Text("USE")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 140)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .cornerRadius(8)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 30)
-    }
-    
-    // MARK: - Video Player Methods
-    private func setupVideoPlayer() {
-        player = AVPlayer(url: videoURL)
+    private func saveVideo() {
+        print("🎬 VideoReviewView: saveVideo called")
         
-        // Add periodic time observer to track playback state
-        player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { time in
-            if let player = player {
-                isPlaying = player.timeControlStatus == .playing
-            }
-        }
-        
-        // Get video duration
-        if let duration = player?.currentItem?.duration {
-            recordingDuration = CMTimeGetSeconds(duration)
-        }
-        
-        // Start playing automatically
-        player?.play()
-        isPlaying = true
-    }
-    
-    private func cleanupVideoPlayer() {
-        player?.pause()
-        player = nil
-    }
-    
-    private func togglePlayback() {
-        if isPlaying {
-            player?.pause()
-        } else {
-            player?.play()
-        }
-        isPlaying.toggle()
-    }
-    
-    private func seekForward() {
-        guard let player = player else { return }
-        let currentTime = player.currentTime()
-        let newTime = CMTimeAdd(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
-        player.seek(to: newTime)
-    }
-    
-    private func seekBackward() {
-        guard let player = player else { return }
-        let currentTime = player.currentTime()
-        let newTime = CMTimeSubtract(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
-        player.seek(to: newTime)
-    }
-    
-    // MARK: - Video Processing
-    private func createAndSaveGameVideo() {
         // Create GameVideo object
         let gameVideo = GameVideo(
             questionId: question.id,
             videoUrl: videoURL.absoluteString,
             thumbnailUrl: nil,
             uploadedAt: Date(),
-            duration: Int(recordingDuration),
-            respondentName: nil
+            duration: nil, // Could calculate from video if needed
+            respondentName: nil // Will be set by the backend
         )
         
-        // Call the onUse callback
-        onUse(gameVideo)
-        
-        // Note: The uploading state will be managed by the parent view
-        // which will dismiss this view when upload completes
+        print("🎬 VideoReviewView: Created GameVideo: \(gameVideo)")
+        onSave(gameVideo)
     }
 }
 
 #Preview {
-    let sampleQuestion = GameQuestion(
-        id: "1",
-        text: "What's Jared's biggest fear?",
-        category: "relationship_romance",
-        isCustom: false,
-        plannerNote: nil,
-        questionForRecorder: "What's Jared's biggest fear?",
-        questionForLiveGuest: "What does Jared say is Jaimee's biggest fear?"
-    )
-    
-    let sampleGame = PartyGame(
-        partyId: UUID(),
-        createdBy: UUID(),
-        gameType: .newlywed,
-        title: "Jared & Jaimee",
-        recorderName: "Jaimee",
-        livePlayerName: "Jared",
-        questions: [sampleQuestion],
-        answers: [:],
-        videos: [:],
-        status: .notStarted
-    )
-    
-    // Create a dummy video URL for preview
-    let dummyURL = URL(string: "https://example.com/sample-video.mp4")!
-    
-    return VideoReviewView(
-        question: sampleQuestion,
-        game: sampleGame,
-        videoURL: dummyURL,
-        onUse: { video in
-            print("Video used: \(video)")
-        },
-        onRedo: {
-            print("Redo recording")
-        }
+    // This is just for preview - won't actually work
+    VideoReviewView(
+        videoURL: URL(string: "https://example.com/video.mp4")!,
+        question: GameQuestion(
+            id: "sample-id",
+            text: "Sample question",
+            category: "fun",
+            isCustom: false,
+            plannerNote: nil,
+            questionForRecorder: "Sample question for recorder",
+            questionForLiveGuest: "Sample question for live guest"
+        ),
+        game: PartyGame(
+            id: UUID(),
+            partyId: UUID(),
+            createdBy: UUID(),
+            gameType: .newlywed,
+            title: "Sample Game",
+            recorderName: nil,
+            livePlayerName: nil,
+            questions: [],
+            answers: [:],
+            videos: [:],
+            status: .inProgress,
+            createdAt: Date(),
+            updatedAt: Date(),
+            questionLockStatus: nil,
+            questionVersion: nil,
+            lockedAt: nil,
+            recordingSettings: nil,
+            respondentProgress: nil
+        ),
+        onSave: { _ in },
+        onRetake: { }
     )
 }

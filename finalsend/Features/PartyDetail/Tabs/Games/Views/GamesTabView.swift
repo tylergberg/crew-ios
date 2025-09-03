@@ -227,17 +227,28 @@ struct MyGamesView: View {
                 }
             )
         }
-        .fullScreenCover(item: $gameToRecord) { game in
-            RecordGameAnswersView(
-                game: game,
-                onGameUpdated: {
-                    // Refresh games data after video is recorded
-                    Task {
-                        await gamesStore.loadGames()
-                    }
-                }
-            )
-        }
+        .background(
+            NavigationLink(
+                destination: gameToRecord.map { game in
+                    RecordGameAnswersView(
+                        game: game,
+                        onGameUpdated: {
+                            // Refresh games data after video is recorded
+                            Task {
+                                await gamesStore.loadGames()
+                            }
+                        }
+                    )
+                },
+                isActive: Binding(
+                    get: { gameToRecord != nil },
+                    set: { if !$0 { gameToRecord = nil } }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+        )
         .overlay(
             ZStack {
                 if gamesStore.isLoading {
