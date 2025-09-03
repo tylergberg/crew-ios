@@ -106,7 +106,8 @@ struct CrewTabView: View {
                 isOwnProfile: attendee.userId.lowercased() == currentUserId.uuidString.lowercased(),
                 crewService: crewService,
                 onCrewDataUpdated: { Task { await dataManager.loadAttendees(partyId: partyId.uuidString, currentUserId: currentUserId.uuidString) } },
-                showTaskManagement: attendee.userId.lowercased() == currentUserId.uuidString.lowercased()
+                showTaskManagement: attendee.userId.lowercased() == currentUserId.uuidString.lowercased(),
+                useNavigationForTasks: false
             )
         }
     }

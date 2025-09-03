@@ -85,18 +85,23 @@ struct DashboardView: View {
                         .environmentObject(SessionManager())
                 }
             }
-            .fullScreenCover(isPresented: $showingProfile) {
-                if let userId = currentUserId {
-                    UnifiedProfileView(
-                        userId: userId,
-                        partyContext: nil,
-                        isOwnProfile: true,
-                        crewService: nil,
-                        onCrewDataUpdated: nil,
-                        showTaskManagement: true
-                    )
-                }
-            }
+            .background(
+                NavigationLink(
+                    destination: currentUserId.map { userId in
+                        UnifiedProfileView(
+                            userId: userId,
+                            partyContext: nil,
+                            isOwnProfile: true,
+                            crewService: nil,
+                            onCrewDataUpdated: nil,
+                            showTaskManagement: true,
+                            useNavigationForTasks: true
+                        )
+                    },
+                    isActive: $showingProfile,
+                    label: { EmptyView() }
+                )
+            )
         }
         .onAppear {
             fetchParties()

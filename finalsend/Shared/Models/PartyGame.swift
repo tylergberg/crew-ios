@@ -122,6 +122,7 @@ struct PartyGame: Identifiable, Codable, Equatable, Hashable {
     let gameType: GameType
     let title: String
     let recorderName: String?
+    let recorderPhone: String?
     let livePlayerName: String?
     let questions: [GameQuestion]
     let answers: [String: GameAnswer]
@@ -176,6 +177,7 @@ struct PartyGame: Identifiable, Codable, Equatable, Hashable {
         case gameType = "game_type"
         case title
         case recorderName = "recorder_name"
+        case recorderPhone = "recorder_phone"
         case livePlayerName = "live_player_name"
         case questions
         case answers
@@ -198,6 +200,7 @@ struct PartyGame: Identifiable, Codable, Equatable, Hashable {
         gameType: GameType,
         title: String,
         recorderName: String? = nil,
+        recorderPhone: String? = nil,
         livePlayerName: String? = nil,
         questions: [GameQuestion],
         answers: [String: GameAnswer],
@@ -217,6 +220,7 @@ struct PartyGame: Identifiable, Codable, Equatable, Hashable {
         self.gameType = gameType
         self.title = title
         self.recorderName = recorderName
+        self.recorderPhone = recorderPhone
         self.livePlayerName = livePlayerName
         self.questions = questions
         self.answers = answers
@@ -241,6 +245,7 @@ struct PartyGame: Identifiable, Codable, Equatable, Hashable {
         gameType = try container.decode(GameType.self, forKey: .gameType)
         title = try container.decode(String.self, forKey: .title)
         recorderName = try container.decodeIfPresent(String.self, forKey: .recorderName)
+        recorderPhone = try container.decodeIfPresent(String.self, forKey: .recorderPhone)
         livePlayerName = try container.decodeIfPresent(String.self, forKey: .livePlayerName)
         status = try container.decode(GameStatus.self, forKey: .status)
         createdAt = try container.decode(Date.self, forKey: .createdAt)

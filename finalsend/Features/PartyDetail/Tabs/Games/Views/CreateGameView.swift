@@ -5,6 +5,8 @@ struct CreateGameView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var gameTitle = ""
+    @State private var recorderName = ""
+    @State private var livePlayerName = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
     
@@ -40,6 +42,34 @@ struct CreateGameView: View {
                         .font(.body)
                         .autocapitalization(.words)
                         .disableAutocorrection(true)
+                }
+                .padding(.horizontal, 20)
+                
+                // Player Names Input
+                VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recorder Name")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        TextField("Who will record the answers?", text: $recorderName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .font(.body)
+                            .autocapitalization(.words)
+                            .disableAutocorrection(true)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Live Player Name")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        TextField("Who will answer live?", text: $livePlayerName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .font(.body)
+                            .autocapitalization(.words)
+                            .disableAutocorrection(true)
+                    }
                 }
                 .padding(.horizontal, 20)
                 
@@ -85,10 +115,10 @@ struct CreateGameView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(gameTitle.isEmpty ? Color.gray : Color.orange)
+                    .background(isFormValid ? Color.orange : Color.gray)
                     .cornerRadius(12)
                 }
-                .disabled(gameTitle.isEmpty || isCreating)
+                .disabled(!isFormValid || isCreating)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
@@ -112,9 +142,15 @@ struct CreateGameView: View {
         }
     }
     
+    private var isFormValid: Bool {
+        !gameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !recorderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !livePlayerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
     private func createGame() {
-        guard !gameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Please enter a game name"
+        guard isFormValid else {
+            errorMessage = "Please fill in all fields"
             return
         }
         
@@ -123,7 +159,9 @@ struct CreateGameView: View {
         
         Task {
             let success = await gamesStore.createGame(
-                title: gameTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                title: gameTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                recorderName: recorderName.trimmingCharacters(in: .whitespacesAndNewlines),
+                livePlayerName: livePlayerName.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             
             await MainActor.run {

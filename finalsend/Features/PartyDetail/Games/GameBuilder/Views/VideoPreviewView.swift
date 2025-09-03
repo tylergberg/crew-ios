@@ -1,11 +1,12 @@
 import SwiftUI
 import AVKit
+import CoreMedia
+import AVFoundation
 
-struct VideoPlaybackView: View {
+struct VideoPreviewView: View {
     let question: GameQuestion
     let video: GameVideo
     let game: PartyGame
-    let onReRecord: () -> Void
     let onClose: () -> Void
     
     @State private var player: AVPlayer?
@@ -29,11 +30,20 @@ struct VideoPlaybackView: View {
                 
                 Spacer(minLength: 20)
                 
-                // Action Buttons
-                actionButtonsView
+                // Close Button Only (no re-record)
+                closeButtonView
             }
         }
         .onAppear {
+            // Configure audio session to play even when ringer is off
+            do {
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+                try AVAudioSession.sharedInstance().setActive(true)
+                print("🔊 Audio session configured for playback")
+            } catch {
+                print("⚠️ Failed to configure audio session: \(error)")
+            }
+            
             setupVideoPlayer()
         }
         .onDisappear {
@@ -56,7 +66,7 @@ struct VideoPlaybackView: View {
     private var videoPlayerView: some View {
         VStack(spacing: 16) {
             if hasError {
-                // Error State
+                // Error State (matching VideoPlaybackView)
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.largeTitle)
@@ -71,19 +81,10 @@ struct VideoPlaybackView: View {
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
-                    
-                    Button("Retry") {
-                        setupVideoPlayer()
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .cornerRadius(8)
                 }
                 .frame(height: 300)
             } else if isLoading {
-                // Loading State
+                // Loading State (matching VideoPlaybackView)
                 VStack(spacing: 16) {
                     ProgressView()
                         .scaleEffect(1.5)
@@ -95,7 +96,7 @@ struct VideoPlaybackView: View {
                 }
                 .frame(height: 300)
             } else if let player = player {
-                // Video Player
+                // Video Player (exact copy from VideoPlaybackView)
                 VideoPlayer(player: player)
                     .aspectRatio(9/16, contentMode: .fit)
                     .cornerRadius(12)
@@ -103,8 +104,8 @@ struct VideoPlaybackView: View {
                     .onTapGesture {
                         togglePlayback()
                     }
-                
-                // Playback Controls
+            
+                // Playback Controls (exact copy from VideoPlaybackView)
                 HStack(spacing: 20) {
                     Button(action: {
                         seekBackward()
@@ -136,39 +137,23 @@ struct VideoPlaybackView: View {
         .padding(.top, 40)
     }
     
-    // MARK: - Action Buttons View
-    private var actionButtonsView: some View {
-        HStack(spacing: 16) {
-            // Re-record Button
-            Button(action: onReRecord) {
-                Text("Re-record")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 140)
-                    .padding(.vertical, 10)
-                    .background(Color(.systemGray))
-                    .cornerRadius(8)
-            }
-            
-            // Close Button
-            Button(action: onClose) {
-                Text("Close")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 140)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .cornerRadius(8)
-            }
+    // MARK: - Close Button View
+    private var closeButtonView: some View {
+        Button(action: onClose) {
+            Text("Close")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .frame(width: 140)
+                .padding(.vertical, 10)
+                .background(Color.blue)
+                .cornerRadius(8)
         }
-        .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.bottom, 30)
     }
     
-    // MARK: - Video Player Methods
+    // MARK: - Video Player Setup (Enhanced)
     private func setupVideoPlayer() {
         print("🎥 Setting up video player...")
         
@@ -186,17 +171,31 @@ struct VideoPlaybackView: View {
         
         print("🎥 Setting up video player with URL: \(url)")
         
-        // Create player with timeout handling
+        // Create player with timeout handling (matching VideoPlaybackView)
         player = AVPlayer(url: url)
         
         // Add periodic time observer to track playback state
         player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { time in
-            if let player = player {
-                isPlaying = player.timeControlStatus == .playing
+            if let player = self.player {
+                self.isPlaying = player.timeControlStatus == .playing
             }
         }
         
-        // Set timeout for loading
+        // Observer for video end
+        if let playerItem = player?.currentItem {
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: playerItem,
+                queue: .main
+            ) { _ in
+                DispatchQueue.main.async {
+                    self.isPlaying = false
+                    self.player?.seek(to: .zero)
+                }
+            }
+        }
+        
+        // Set timeout for loading (10 seconds like VideoPlaybackView)
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
             if self.isLoading {
                 print("⚠️ Video loading timeout")
@@ -204,7 +203,7 @@ struct VideoPlaybackView: View {
             }
         }
         
-        // Start playing automatically after a short delay
+        // Start playing automatically after a short delay (like VideoPlaybackView)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             if let player = self.player {
                 player.play()
@@ -226,10 +225,10 @@ struct VideoPlaybackView: View {
     private func cleanupVideoPlayer() {
         player?.pause()
         player = nil
-        isLoading = false
-        hasError = false
+        NotificationCenter.default.removeObserver(self)
     }
     
+    // MARK: - Video Player Controls (copied from VideoPlaybackView)
     private func togglePlayback() {
         guard let player = player else { return }
         
@@ -238,67 +237,26 @@ struct VideoPlaybackView: View {
         } else {
             player.play()
         }
-        isPlaying.toggle()
-    }
-    
-    private func seekForward() {
-        guard let player = player else { return }
-        let currentTime = player.currentTime()
-        let newTime = CMTimeAdd(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
-        player.seek(to: newTime)
     }
     
     private func seekBackward() {
         guard let player = player else { return }
         let currentTime = player.currentTime()
-        let newTime = CMTimeSubtract(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
-        player.seek(to: newTime)
+        let seekTime = CMTimeSubtract(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
+        let clampedTime = CMTimeMaximum(seekTime, CMTime.zero)
+        player.seek(to: clampedTime)
+    }
+    
+    private func seekForward() {
+        guard let player = player else { return }
+        let currentTime = player.currentTime()
+        let seekTime = CMTimeAdd(currentTime, CMTime(seconds: 10, preferredTimescale: 600))
+        
+        if let duration = player.currentItem?.duration, duration.isValid {
+            let clampedTime = CMTimeMinimum(seekTime, duration)
+            player.seek(to: clampedTime)
+        } else {
+            player.seek(to: seekTime)
+        }
     }
 }
-
-#Preview {
-    let sampleQuestion = GameQuestion(
-        id: "template_1_1756814502894",
-        text: "When did you first realize you were in love?",
-        category: "relationship_romance",
-        isCustom: false,
-        plannerNote: "A sweet moment to capture",
-        questionForRecorder: "When did you first realize you were in love?",
-        questionForLiveGuest: "When did Jared first realize they were in love?"
-    )
-    
-    let sampleVideo = GameVideo(
-        questionId: "template_1_1756814502894",
-        videoUrl: "https://example.com/sample-video.mp4",
-        thumbnailUrl: nil,
-        uploadedAt: Date(),
-        duration: 30,
-        respondentName: "Jaimee"
-    )
-    
-    let sampleGame = PartyGame(
-        partyId: UUID(),
-        createdBy: UUID(),
-        gameType: .newlywed,
-        title: "Sample Game",
-        recorderName: "Jaimee",
-        livePlayerName: "Jared",
-        questions: [sampleQuestion],
-        answers: [:],
-        videos: [:],
-        status: .notStarted
-    )
-    
-    VideoPlaybackView(
-        question: sampleQuestion,
-        video: sampleVideo,
-        game: sampleGame,
-        onReRecord: {
-            print("Re-record tapped")
-        },
-        onClose: {
-            print("Close tapped")
-        }
-    )
-}
-
