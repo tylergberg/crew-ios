@@ -638,7 +638,7 @@ struct PartyHubView: View {
                 // Packing
                 FeaturePreviewCard(
                     title: "Packing",
-                    subtitle: "Shared packing lists",
+                    subtitle: "Your personal list",
                     icon: "shippingbox.circle.fill",
                     color: Color.brandBlue,
                     action: { showPackingModal = true }
@@ -698,7 +698,9 @@ struct PartyHubView: View {
             ExpensesTabView(
                 partyId: partyId,
                 currentUserId: sessionManager.userProfile?.id ?? "",
-                attendeesCount: dataManager.attendees.count
+                attendeesCount: dataManager.attendees.count,
+                attendees: dataManager.attendees,
+                onDismiss: { showExpensesModal = false }
             )
         }
         .fullScreenCover(isPresented: $showTransportModal) {
