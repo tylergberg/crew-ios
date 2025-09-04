@@ -18,6 +18,7 @@ struct AddEventSheet: View {
     @State private var endTime = Date()
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    private let didPrefillDate: Bool
     
     private var timezoneInfo: (name: String, abbr: String) {
         if let timezone = cityTimezone {
@@ -103,7 +104,48 @@ struct AddEventSheet: View {
         }
     }
     
+    init(
+        partyId: String,
+        currentUserId: String,
+        cityTimezone: String?,
+        onEventAdded: @escaping (ItineraryEvent) -> Void,
+        prefillTitle: String? = nil,
+        prefillDescription: String? = nil,
+        prefillLocation: String? = nil,
+        prefillLocationUrl: String? = nil,
+        prefillImageUrl: String? = nil,
+        prefillDate: Date? = nil
+    ) {
+        self.partyId = partyId
+        self.currentUserId = currentUserId
+        self.cityTimezone = cityTimezone
+        self.onEventAdded = onEventAdded
+        // Set initial state from prefill values
+        self._title = State(initialValue: prefillTitle ?? "")
+        self._description = State(initialValue: prefillDescription ?? "")
+        self._location = State(initialValue: prefillLocation ?? "")
+        self._locationUrl = State(initialValue: prefillLocationUrl ?? "")
+        self._imageUrl = State(initialValue: prefillImageUrl ?? "")
+        if let prefillDate = prefillDate {
+            self._selectedDate = State(initialValue: prefillDate)
+            // Default start/end times anchored to the prefill date
+            let calendar = Calendar.current
+            let start = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: prefillDate) ?? prefillDate
+            let end = calendar.date(byAdding: .hour, value: 2, to: start) ?? start
+            self._startTime = State(initialValue: start)
+            self._endTime = State(initialValue: end)
+            self.didPrefillDate = true
+        } else {
+            self._selectedDate = State(initialValue: Date())
+            self._startTime = State(initialValue: Date())
+            self._endTime = State(initialValue: Date())
+            self.didPrefillDate = false
+        }
+    }
+    
     private func setupDefaultTimes() {
+        // If dates were provided via prefill, don't override them
+        if didPrefillDate { return }
         let now = Date()
         selectedDate = now
         
