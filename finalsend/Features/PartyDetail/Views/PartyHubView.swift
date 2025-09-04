@@ -511,7 +511,7 @@ struct PartyHubView: View {
                             let displayTags = Array(partyManager.vibeTags.prefix(3))
                             let remaining = partyManager.vibeTags.count - 3
                             if remaining > 0 {
-                                return "\(displayTags.joined(separator: ", ")) +\(remaining) more"
+                                return "\(displayTags.joined(separator: ", ")), +\(remaining)"
                             } else {
                                 return displayTags.joined(separator: ", ")
                             }
@@ -576,7 +576,7 @@ struct PartyHubView: View {
                 // Explore
                 FeaturePreviewCard(
                     title: "Explore",
-                    subtitle: "Discover experiences & vendors",
+                    subtitle: "Discover experiences",
                     icon: "magnifyingglass.circle.fill",
                     color: Color.brandBlue,
                     action: { showVendorsModal = true }
@@ -842,6 +842,9 @@ struct PartyHubView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("showChatModal"))) { _ in
             showChatModal = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dismissVendorsModal"))) { _ in
+            showVendorsModal = false
         }
 
         .onChange(of: partyManager.isLoaded) { isLoaded in

@@ -123,9 +123,7 @@ final class TasksStore: ObservableObject {
     }
 }
 
-final class VendorService {
-    func fetchVendors(cityId: UUID) async throws -> [String] { [] }
-}
+// MARK: - Vendors (implemented under Features/PartyDetail/Tabs/Vendors)
 @MainActor
 final class ItineraryService: ObservableObject {
     @Published var events: [ItineraryEvent] = []
@@ -277,8 +275,93 @@ struct ItineraryView: View {
 }
 
 struct VendorsTabView: View {
+    @EnvironmentObject var partyManager: PartyManager
+    @EnvironmentObject var sessionManager: SessionManager
     let userRole: UserRole
-    var body: some View { Text("Vendors (placeholder)") }
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var vendorsByType: [(VendorType, [Vendor])] = []
+    @State private var selectedVendor: Vendor?
+    private let vendorService = VendorService()
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    VStack(spacing: 16) { ProgressView(); Text("Loading vendors…") }
+                } else if let errorMessage = errorMessage {
+                    VStack(spacing: 12) { Text("Failed to load vendors"); Text(errorMessage).font(.footnote).foregroundColor(.secondary) }
+                        .padding()
+                } else if vendorsByType.isEmpty {
+                    EmptyVendors()
+                } else {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            ForEach(vendorsByType, id: \.0) { pair in
+                                VendorGrid(
+                                    title: pair.0.displayName,
+                                    vendors: pair.1,
+                                    onSelect: { vendor in selectedVendor = vendor }
+                                )
+                            }
+                        }
+                        .padding(.vertical, 16)
+                    }
+                }
+            }
+            .navigationTitle("Explore")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { NotificationCenter.default.post(name: Notification.Name("dismissVendorsModal"), object: nil) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { Task { await load() } }
+        .sheet(item: $selectedVendor) { vendor in
+            NavigationView {
+                VendorDetailView(vendor: vendor)
+                    .environmentObject(partyManager)
+                    .environmentObject(sessionManager)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: { selectedVendor = nil }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Explore")
+                                }
+                            }
+                        }
+                    }
+            }
+            .sheet(isPresented: Binding(get: { false }, set: { _ in })) { EmptyView() }
+        }
+    }
+
+    private func load() async {
+        guard let cityId = partyManager.cityId else {
+            errorMessage = "Set a destination city to explore vendors."
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let vendors = try await vendorService.fetchVendors(cityId: cityId)
+            let grouped = Dictionary(grouping: vendors) { VendorType.from(types: $0.types) }
+            let ordered: [(VendorType, [Vendor])] = VendorType.allCases.compactMap { type in
+                if let list = grouped[type], !list.isEmpty { return (type, list) }
+                return nil
+            }
+            vendorsByType = ordered
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 struct ItineraryEvent: Identifiable, Codable, Hashable {

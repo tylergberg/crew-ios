@@ -7,6 +7,7 @@ struct ItineraryTabView: View {
     let userRole: UserRole
     let cityTimezone: String?
     
+    @EnvironmentObject var partyManager: PartyManager
     @StateObject private var itineraryService: ItineraryService
     @State private var selectedDate: Date = Date()
     @State private var showAddEventSheet = false
@@ -108,7 +109,8 @@ struct ItineraryTabView: View {
                             itineraryService.errorMessage = "Failed to add event: \(error.localizedDescription)"
                         }
                     }
-                }
+                },
+                prefillDate: partyManager.startDate
             )
         }
         .sheet(isPresented: $showEditEventSheet) {
