@@ -106,7 +106,7 @@ struct ExpensesTabView: View {
                     destination: Group {
                         if let expense = selectedExpense {
                             ExpenseDetailView(
-                                expense: expense,
+                                expenseId: expense.id.uuidString,
                                 expensesStore: expensesStore,
                                 currentUserId: currentUserId,
                                 partyId: partyId,
@@ -252,13 +252,13 @@ struct BalancesListView: View {
                             BalanceRowView(
                                 title: "Total Paid",
                                 amount: userBalance.totalPaid,
-                                color: .green
+                                color: .primary
                             )
                             
                             BalanceRowView(
                                 title: "Total Share",
                                 amount: userBalance.totalOwed,
-                                color: .orange
+                                color: .primary
                             )
                             
                             Divider()

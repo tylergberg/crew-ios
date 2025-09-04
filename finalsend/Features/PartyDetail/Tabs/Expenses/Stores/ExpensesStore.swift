@@ -276,6 +276,60 @@ class ExpensesStore: ObservableObject {
         await loadAllWithAttendees(partyId: partyId, userId: currentUserId)
     }
     
+    // MARK: - Expense Update
+    func updateExpense(expenseId: UUID, formData: ExpenseFormData, partyId: UUID, currentUserId: UUID) async throws {
+        print("💰 [ExpensesStore] Updating expense: \(expenseId)")
+        
+        // Calculate splits
+        let splits = calculateSplits(from: formData)
+        
+        // Create expense splits for database
+        let expenseSplits = splits.map { split in
+            ExpenseSplitResponse(
+                id: UUID(),
+                expense_id: expenseId,
+                user_id: UUID(uuidString: split.userId) ?? UUID(),
+                owed_share: split.owedShare,
+                paid_share: split.paidShare,
+                created_at: ISO8601DateFormatter().string(from: Date())
+            )
+        }
+        
+        // Create expense for database
+        let expenseResponse = ExpenseResponse(
+            id: expenseId,
+            party_id: partyId,
+            title: formData.title,
+            amount: formData.amount ?? 0.0,
+            paid_by: UUID(uuidString: formData.paidBy) ?? UUID(),
+            received_by: nil,
+            date: ISO8601DateFormatter().string(from: formData.date),
+            category: formData.category.rawValue,
+            split_type: formData.splitType.rawValue,
+            notes: formData.notes.isEmpty ? nil : formData.notes,
+            receipt_image_url: nil,
+            created_at: ISO8601DateFormatter().string(from: Date()),
+            created_by: currentUserId,
+            updated_at: ISO8601DateFormatter().string(from: Date()),
+            expense_splits: expenseSplits
+        )
+        
+        try await updateExpenseInDatabase(expense: expenseResponse, splits: expenseSplits)
+        
+        // Reload expenses and balances from database
+        await loadAllWithAttendees(partyId: partyId, userId: currentUserId)
+    }
+    
+    // MARK: - Expense Delete
+    func deleteExpense(expenseId: UUID, partyId: UUID, currentUserId: UUID) async throws {
+        print("💰 [ExpensesStore] Deleting expense: \(expenseId)")
+        
+        try await deleteExpenseFromDatabase(expenseId: expenseId)
+        
+        // Reload expenses and balances from database
+        await loadAllWithAttendees(partyId: partyId, userId: currentUserId)
+    }
+    
     private func calculateSplits(from formData: ExpenseFormData) -> [ExpenseSplitData] {
         var splits: [ExpenseSplitData] = []
         let totalAmount = formData.amount ?? 0.0
@@ -388,6 +442,126 @@ class ExpensesStore: ObservableObject {
             
         } catch {
             print("💰 [ExpensesStore] Error submitting expense to database: \(error)")
+            throw error
+        }
+    }
+    
+    private func updateExpenseInDatabase(expense: ExpenseResponse, splits: [ExpenseSplitResponse]) async throws {
+        print("💰 [ExpensesStore] Updating expense in database: \(expense.title)")
+        
+        do {
+            // First, delete existing splits for this expense
+            let _: [ExpenseSplitResponse] = try await supabase
+                .from("expense_splits")
+                .delete()
+                .eq("expense_id", value: expense.id)
+                .select()
+                .execute()
+                .value
+            
+            print("💰 [ExpensesStore] Deleted existing splits for expense: \(expense.id)")
+            
+            // Update the expense
+            struct ExpenseUpdateData: Encodable {
+                let title: String
+                let amount: Double
+                let paid_by: String
+                let received_by: String?
+                let date: String
+                let category: String
+                let split_type: String
+                let notes: String?
+                let receipt_image_url: String?
+                let updated_at: String
+            }
+            
+            let expenseData = ExpenseUpdateData(
+                title: expense.title,
+                amount: expense.amount,
+                paid_by: expense.paid_by.uuidString,
+                received_by: expense.received_by?.uuidString,
+                date: expense.date,
+                category: expense.category,
+                split_type: expense.split_type,
+                notes: expense.notes,
+                receipt_image_url: expense.receipt_image_url,
+                updated_at: expense.updated_at ?? ISO8601DateFormatter().string(from: Date())
+            )
+            
+            let _: [ExpenseResponse] = try await supabase
+                .from("expenses")
+                .update(expenseData)
+                .eq("id", value: expense.id)
+                .select()
+                .execute()
+                .value
+            
+            print("💰 [ExpensesStore] Successfully updated expense: \(expense.id)")
+            
+            // Insert new splits
+            struct ExpenseSplitInsertData: Encodable {
+                let expense_id: String
+                let user_id: String
+                let owed_share: Double?
+                let paid_share: Double?
+                let created_at: String
+            }
+            
+            let splitsData = splits.map { split in
+                ExpenseSplitInsertData(
+                    expense_id: expense.id.uuidString,
+                    user_id: split.user_id.uuidString,
+                    owed_share: split.owed_share,
+                    paid_share: split.paid_share,
+                    created_at: split.created_at
+                )
+            }
+            
+            print("💰 [ExpensesStore] Inserting \(splitsData.count) new splits")
+            
+            let _: [ExpenseSplitResponse] = try await supabase
+                .from("expense_splits")
+                .insert(splitsData)
+                .select()
+                .execute()
+                .value
+            
+            print("💰 [ExpensesStore] Successfully inserted all new expense splits")
+            
+        } catch {
+            print("💰 [ExpensesStore] Error updating expense in database: \(error)")
+            throw error
+        }
+    }
+    
+    private func deleteExpenseFromDatabase(expenseId: UUID) async throws {
+        print("💰 [ExpensesStore] Deleting expense from database: \(expenseId)")
+        
+        do {
+            // First, delete expense splits (due to foreign key constraints)
+            let _: [ExpenseSplitResponse] = try await supabase
+                .from("expense_splits")
+                .delete()
+                .eq("expense_id", value: expenseId.uuidString)
+                .select()
+                .execute()
+                .value
+            
+            print("💰 [ExpensesStore] Deleted expense splits for expense: \(expenseId)")
+            
+            // Then, delete the expense
+            let _: [ExpenseResponse] = try await supabase
+                .from("expenses")
+                .delete()
+                .eq("id", value: expenseId.uuidString)
+                .select()
+                .execute()
+                .value
+            
+            print("💰 [ExpensesStore] Successfully deleted expense: \(expenseId)")
+            
+        } catch {
+            print("💰 [ExpensesStore] Error deleting expense from database: \(error)")
             throw error
         }
     }

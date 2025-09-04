@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ExpenseDetailView: View {
-    let expense: Expense
+    let expenseId: String
     @ObservedObject var expensesStore: ExpensesStore
     let currentUserId: String
     let partyId: String
@@ -11,12 +11,18 @@ struct ExpenseDetailView: View {
     @State private var showDeleteAlert = false
     @State private var isLoading = true
     
+    private var expense: Expense? {
+        expensesStore.expenses.first { $0.id.uuidString == expenseId }
+    }
+    
     private var paidByName: String {
+        guard let expense = expense else { return "Unknown User" }
         let name = expensesStore.getAttendeeName(by: expense.paidBy.uuidString)
         return name.isEmpty ? "Unknown User" : name
     }
     
     private var categoryDisplayName: String {
+        guard let expense = expense else { return "General" }
         switch expense.category {
         case "food":
             return "Food"
@@ -36,6 +42,7 @@ struct ExpenseDetailView: View {
     }
     
     private var splitTypeDisplay: String {
+        guard let expense = expense else { return "Split" }
         switch expense.splitType {
         case "even":
             return "Even Split"
@@ -49,6 +56,7 @@ struct ExpenseDetailView: View {
     }
     
     private var formattedDate: String {
+        guard let expense = expense else { return "" }
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -56,21 +64,51 @@ struct ExpenseDetailView: View {
     }
     
     private var formattedAmount: String {
+        guard let expense = expense else { return "$0.00" }
         return String(format: "$%.2f", expense.amount)
     }
     
-    init(expense: Expense, expensesStore: ExpensesStore, currentUserId: String, partyId: String, onDismiss: @escaping () -> Void) {
-        self.expense = expense
+    private func deleteExpense() {
+        guard let expense = expense else { return }
+        Task {
+            do {
+                try await expensesStore.deleteExpense(
+                    expenseId: expense.id,
+                    partyId: UUID(uuidString: partyId) ?? UUID(),
+                    currentUserId: UUID(uuidString: currentUserId) ?? UUID()
+                )
+                
+                await MainActor.run {
+                    onDismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    // TODO: Show error alert
+                    print("Error deleting expense: \(error)")
+                }
+            }
+        }
+    }
+    
+    init(expenseId: String, expensesStore: ExpensesStore, currentUserId: String, partyId: String, onDismiss: @escaping () -> Void) {
+        self.expenseId = expenseId
         self.expensesStore = expensesStore
         self.currentUserId = currentUserId
         self.partyId = partyId
         self.onDismiss = onDismiss
-        print("🔍 ExpenseDetailView: Initialized with expense '\(expense.title)', attendees count: \(expensesStore.attendees.count)")
     }
     
     var body: some View {
         Group {
-                if isLoading || expensesStore.attendees.isEmpty {
+            if expense == nil {
+                VStack {
+                    Spacer()
+                    Text("Expense not found")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            } else if isLoading || expensesStore.attendees.isEmpty {
                     VStack {
                         Spacer()
                         ProgressView("Loading...")
@@ -100,7 +138,7 @@ struct ExpenseDetailView: View {
                             VStack(spacing: 16) {
                                 // Title and Amount
                                 VStack(spacing: 8) {
-                                    Text(expense.title)
+                                    Text(expense?.title ?? "")
                                         .font(.system(size: 20, weight: .bold))
                                         .foregroundColor(.primary)
                                         .multilineTextAlignment(.center)
@@ -109,6 +147,42 @@ struct ExpenseDetailView: View {
                                         .font(.system(size: 28, weight: .bold))
                                         .foregroundColor(.blue)
                                 }
+                                
+                                // Action Buttons
+                                HStack(spacing: 16) {
+                                    Button(action: {
+                                        showEditExpense = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "pencil")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Edit")
+                                                .font(.system(size: 16, weight: .medium))
+                                        }
+                                        .foregroundColor(.blue)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.blue.opacity(0.1))
+                                        .cornerRadius(20)
+                                    }
+                                    
+                                    Button(action: {
+                                        showDeleteAlert = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Delete")
+                                                .font(.system(size: 16, weight: .medium))
+                                        }
+                                        .foregroundColor(.red)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.red.opacity(0.1))
+                                        .cornerRadius(20)
+                                    }
+                                }
+                                .padding(.top, 8)
                                 
                                 Divider()
                                 
@@ -120,7 +194,7 @@ struct ExpenseDetailView: View {
                                     DetailRow(label: "Split Type", value: splitTypeDisplay)
                                 }
                                 
-                                if let notes = expense.notes, !notes.isEmpty {
+                                if let notes = expense?.notes, !notes.isEmpty {
                                     Divider()
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("Notes")
@@ -147,7 +221,7 @@ struct ExpenseDetailView: View {
                                     .foregroundColor(.primary)
                                 
                                 VStack(spacing: 8) {
-                                    ForEach(expense.splits, id: \.id) { split in
+                                    ForEach(expense?.splits ?? [], id: \.id) { split in
                                         SplitRowView(
                                             split: split,
                                             expensesStore: expensesStore,
@@ -172,28 +246,35 @@ struct ExpenseDetailView: View {
                 }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarItems(
-            trailing: Menu {
-                Button("Edit Expense") {
-                    showEditExpense = true
-                }
-                
-                Button("Delete Expense", role: .destructive) {
-                    showDeleteAlert = true
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 20))
+        .background(
+            NavigationLink(
+                destination: Group {
+                    if let expense = expense {
+                        EditExpenseView(
+                            expense: expense,
+                            partyId: partyId,
+                            currentUserId: currentUserId,
+                            attendees: expensesStore.attendees,
+                            expensesStore: expensesStore,
+                            onDismiss: {
+                                showEditExpense = false
+                            },
+                            onExpenseUpdated: {
+                                // Expense will be automatically refreshed by the store
+                            }
+                        )
+                    }
+                },
+                isActive: $showEditExpense
+            ) {
+                EmptyView()
             }
+            .opacity(0) // Hide the link completely
         )
-        .sheet(isPresented: $showEditExpense) {
-            // TODO: Implement EditExpenseView
-            Text("Edit Expense - Coming Soon")
-        }
         .alert("Delete Expense", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                // TODO: Implement delete functionality
+                deleteExpense()
             }
         } message: {
             Text("Are you sure you want to delete this expense? This action cannot be undone.")
