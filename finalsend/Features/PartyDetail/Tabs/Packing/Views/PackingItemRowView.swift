@@ -37,18 +37,6 @@ struct PackingItemRowView: View {
             
             Spacer()
             
-            // Packed badge
-            if item.isPacked {
-                Text("PACKED")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.green)
-                    .cornerRadius(8)
-            }
-            
             // Actions button
             Button(action: {
                 showingActions = true
@@ -87,7 +75,7 @@ struct PackingItemRowView: View {
                 title: "Passport",
                 description: "Don't forget your passport!",
                 partyId: UUID(),
-                createdBy: UUID()
+                userId: UUID()
             ),
             onTogglePacked: { _ in },
             onEdit: { },
@@ -99,7 +87,7 @@ struct PackingItemRowView: View {
                 title: "Sunscreen",
                 description: "SPF 50+ recommended",
                 partyId: UUID(),
-                createdBy: UUID(),
+                userId: UUID(),
                 isPacked: true
             ),
             onTogglePacked: { _ in },

@@ -11,7 +11,9 @@ struct PackingTabView: View {
     @State private var editingItem: PackingItem?
     @State private var showingDeleteAlert = false
     @State private var itemToDelete: PackingItem?
-    @State private var searchText = ""
+    @State private var isAddingNewItem = false
+    @State private var newItemTitle = ""
+    @Environment(\.dismiss) private var dismiss
     
     init(partyId: UUID, userRole: UserRole, currentUserId: UUID, supabase: SupabaseClient) {
         self.partyId = partyId
@@ -20,16 +22,6 @@ struct PackingTabView: View {
         self._packingStore = StateObject(wrappedValue: PackingStore(supabase: supabase))
     }
     
-    var filteredItems: [PackingItem] {
-        if searchText.isEmpty {
-            return packingStore.items
-        } else {
-            return packingStore.items.filter { item in
-                item.title.localizedCaseInsensitiveContains(searchText) ||
-                (item.description?.localizedCaseInsensitiveContains(searchText) ?? false)
-            }
-        }
-    }
     
     var packedCount: Int {
         packingStore.items.filter { $0.isPacked }.count
@@ -78,7 +70,7 @@ struct PackingTabView: View {
                     }
                     .padding()
                     Spacer()
-                } else if filteredItems.isEmpty {
+                } else if packingStore.items.isEmpty {
                     Spacer()
                     VStack(spacing: 16) {
                         Image(systemName: "shippingbox")
@@ -95,7 +87,7 @@ struct PackingTabView: View {
                             .multilineTextAlignment(.center)
                         
                         Button("Add First Item") {
-                            showingAddItem = true
+                            startAddingNewItem()
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -138,22 +130,20 @@ struct PackingTabView: View {
                             .cornerRadius(12)
                         }
                         
-                        // Search Bar
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.secondary)
-                            
-                            TextField("Search packing items...", text: $searchText)
-                                .textFieldStyle(PlainTextFieldStyle())
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
                         
                         // Items List
                         ScrollView {
                             LazyVStack(spacing: 12) {
-                                ForEach(filteredItems) { item in
+                                // Inline add item row
+                                if isAddingNewItem {
+                                    InlineAddPackingItemView(
+                                        title: $newItemTitle,
+                                        onSave: saveNewItem,
+                                        onCancel: cancelAddingNewItem
+                                    )
+                                }
+                                
+                                ForEach(packingStore.items) { item in
                                     PackingItemRowView(
                                         item: item,
                                         onTogglePacked: { isPacked in
@@ -184,9 +174,17 @@ struct PackingTabView: View {
             .navigationTitle("Packing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { dismiss() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.backward")
+                            Text("Back")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Add") {
-                        showingAddItem = true
+                        startAddingNewItem()
                     }
                 }
             }
@@ -195,14 +193,6 @@ struct PackingTabView: View {
             Task {
                 await packingStore.load(partyId: partyId, userId: currentUserId)
             }
-        }
-        .sheet(isPresented: $showingAddItem) {
-            AddPackingItemView(
-                partyId: partyId,
-                userId: currentUserId,
-                packingStore: packingStore,
-                editingItem: editingItem
-            )
         }
         .alert("Delete Item", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { }
@@ -221,6 +211,33 @@ struct PackingTabView: View {
                 editingItem = nil
             }
         }
+    }
+    
+    private func startAddingNewItem() {
+        isAddingNewItem = true
+        newItemTitle = ""
+    }
+    
+    private func cancelAddingNewItem() {
+        isAddingNewItem = false
+        newItemTitle = ""
+    }
+    
+    private func saveNewItem() {
+        let trimmedTitle = newItemTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !trimmedTitle.isEmpty else { return }
+        
+        Task {
+            await packingStore.addItem(
+                partyId: partyId,
+                title: trimmedTitle,
+                description: nil,
+                userId: currentUserId
+            )
+        }
+        
+        cancelAddingNewItem()
     }
 }
 

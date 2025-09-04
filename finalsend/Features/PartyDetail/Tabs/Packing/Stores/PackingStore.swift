@@ -96,7 +96,7 @@ struct PackingItem: Identifiable, Codable {
     let title: String
     let description: String?
     let partyId: UUID
-    let createdBy: UUID
+    let userId: UUID
     let createdAt: Date
     let updatedAt: Date
     var isPacked: Bool
@@ -106,18 +106,27 @@ struct PackingItem: Identifiable, Codable {
         case title
         case description
         case partyId = "party_id"
-        case createdBy = "created_by"
+        case userId = "user_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case isPacked = "is_packed"
     }
     
-    init(id: UUID = UUID(), title: String, description: String? = nil, partyId: UUID, createdBy: UUID, createdAt: Date = Date(), updatedAt: Date = Date(), isPacked: Bool = false) {
+    init(
+        id: UUID = UUID(),
+        title: String,
+        description: String? = nil,
+        partyId: UUID,
+        userId: UUID,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        isPacked: Bool = false
+    ) {
         self.id = id
         self.title = title
         self.description = description
         self.partyId = partyId
-        self.createdBy = createdBy
+        self.userId = userId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isPacked = isPacked
