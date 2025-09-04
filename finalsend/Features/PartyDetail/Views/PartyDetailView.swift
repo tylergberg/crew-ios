@@ -31,65 +31,69 @@ struct PartyDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     // Navigation bar at the top - matching main view structure
-                    HStack {
-                        // Left: Back Button
-                        Button(action: {
-                            print("🔙 Back button tapped - dismissing party detail")
-                            // Post notification to dismiss the party detail view
-                            NotificationCenter.default.post(name: Notification.Name("dismissPartyDetail"), object: nil)
-                            dismiss()
-                        }) {
-                            Image(systemName: "arrowshape.backward.circle.fill")
-                                .font(.system(size: 32, weight: .medium))
-                                .foregroundColor(Color(hex: "#353E3E"))
-                        }
-                        
-                        Spacer()
-                        
-                        // Center: Crew Logo
+                    ZStack {
+                        // Center: Crew Logo (always centered)
                         Image("crew-wordmark")
                             .resizable()
                             .scaledToFit()
                             .frame(height: 24)
                         
-                        Spacer()
-                        
-                        // Right: Settings Button (only show for admin/organizer)
-                        if partyManager.isOrganizerOrAdmin {
-                            Menu {
-                                Button("Edit Party Details") {
-                                    // TODO: Open edit party sheet
-                                    print("Edit party details")
-                                }
-                                
-                                Button("Edit Cover Image") {
-                                    // TODO: Open cover image picker
-                                    print("Edit cover image")
-                                }
-                                
-                                Button("Edit Theme") {
-                                    showEditThemeSheet = true
-                                }
-                                
-                                Button("Edit Party Type") {
-                                    showEditPartyTypeSheet = true
-                                }
-                                
-                                Button("Manage Attendees") {
-                                    // TODO: Navigate to crew management
-                                    print("Manage attendees")
-                                }
-                                
-                                Divider()
-                                
-                                Button("Delete Party", role: .destructive) {
-                                    // TODO: Open delete confirmation
-                                    print("Delete party")
-                                }
-                            } label: {
-                                Image(systemName: "gearshape.circle.fill")
+                        // Left: Back Button
+                        HStack {
+                            Button(action: {
+                                print("🔙 Back button tapped - dismissing party detail")
+                                // Post notification to dismiss the party detail view
+                                NotificationCenter.default.post(name: Notification.Name("dismissPartyDetail"), object: nil)
+                                dismiss()
+                            }) {
+                                Image(systemName: "arrowshape.backward.circle.fill")
                                     .font(.system(size: 32, weight: .medium))
                                     .foregroundColor(Color(hex: "#353E3E"))
+                            }
+                            
+                            Spacer()
+                        }
+                        
+                        // Right: Settings Button (only show for admin/organizer)
+                        HStack {
+                            Spacer()
+                            
+                            if partyManager.isOrganizerOrAdmin {
+                                Menu {
+                                    Button("Edit Party Details") {
+                                        // TODO: Open edit party sheet
+                                        print("Edit party details")
+                                    }
+                                    
+                                    Button("Edit Cover Image") {
+                                        // TODO: Open cover image picker
+                                        print("Edit cover image")
+                                    }
+                                    
+                                    Button("Edit Theme") {
+                                        showEditThemeSheet = true
+                                    }
+                                    
+                                    Button("Edit Party Type") {
+                                        showEditPartyTypeSheet = true
+                                    }
+                                    
+                                    Button("Manage Attendees") {
+                                        // TODO: Navigate to crew management
+                                        print("Manage attendees")
+                                    }
+                                    
+                                    Divider()
+                                    
+                                    Button("Delete Party", role: .destructive) {
+                                        // TODO: Open delete confirmation
+                                        print("Delete party")
+                                    }
+                                } label: {
+                                    Image(systemName: "gearshape.circle.fill")
+                                        .font(.system(size: 32, weight: .medium))
+                                        .foregroundColor(Color(hex: "#353E3E"))
+                                }
                             }
                         }
                     }
