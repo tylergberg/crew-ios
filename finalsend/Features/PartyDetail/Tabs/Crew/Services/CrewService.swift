@@ -8,6 +8,15 @@ import Foundation
 import Supabase
 
 final class CrewService {
+    struct InviteTokenRow: Decodable {
+        let token: UUID
+    }
+    struct InviteInsertPayload: Encodable {
+        let party_id: UUID
+        let role: String
+        let special_role: String?
+    }
+
     func fetchAttendees(for partyId: UUID) async throws -> [PartyAttendee] {
         []
     }
@@ -49,5 +58,27 @@ final class CrewService {
 
     @MainActor
     var errorMessage: String? { nil }
+
+    // MARK: - Invites
+    /// Creates a party invite and returns a shareable URL.
+    /// Defaults to role "attendee" and no special role.
+    func generateInviteLink(partyId: UUID, role: String = "attendee", specialRole: String? = nil) async throws -> String {
+        let client = SupabaseManager.shared.client
+
+        // Prepare typed Encodable payload
+        let payload = InviteInsertPayload(party_id: partyId, role: role, special_role: (specialRole?.isEmpty == false ? specialRole : nil))
+
+        // Insert and select token
+        let response: InviteTokenRow = try await client
+            .from("party_invites")
+            .insert(payload)
+            .select("token")
+            .single()
+            .execute()
+            .value
+
+        // Build canonical website URL for best social previews
+        return "https://www.finalsend.co/invite?token=\(response.token.uuidString)"
+    }
 }
 

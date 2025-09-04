@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct CrewTabView: View {
     let partyId: UUID
@@ -15,6 +16,9 @@ struct CrewTabView: View {
     @EnvironmentObject var dataManager: PartyDataManager
     @Environment(\.dismiss) private var dismiss
     @State private var selectedAttendee: PartyAttendee?
+    @State private var isGeneratingInvite = false
+    @State private var showShareSheet = false
+    @State private var inviteURL: URL?
 
     var body: some View {
         NavigationView {
@@ -87,9 +91,27 @@ struct CrewTabView: View {
                         Image(systemName: "xmark")
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isOrganizerOrAdmin {
+                        Button(action: { Task { await generateAndShareInvite() } }) {
+                            if isGeneratingInvite {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "person.crop.circle.fill.badge.plus")
+                            }
+                        }
+                        .disabled(isGeneratingInvite)
+                        .accessibilityLabel("Invite")
+                    }
+                }
             }
         }
         .navigationViewStyle(.stack)
+        .sheet(isPresented: $showShareSheet) {
+            if let inviteURL = inviteURL {
+                ShareSheet(activityItems: [inviteURL])
+            }
+        }
         .fullScreenCover(item: $selectedAttendee) { attendee in
             UnifiedProfileView(
                 userId: attendee.userId,
@@ -113,6 +135,34 @@ struct CrewTabView: View {
     }
 }
 private extension CrewTabView {
+    var isOrganizerOrAdmin: Bool {
+        if let me = dataManager.attendees.first(where: { $0.isCurrentUser }) {
+            return me.role == .admin || me.role == .organizer
+        }
+        if let me = dataManager.attendees.first(where: { $0.userId.lowercased() == currentUserId.uuidString.lowercased() }) {
+            return me.role == .admin || me.role == .organizer
+        }
+        return false
+    }
+
+    @MainActor
+    func generateAndShareInvite() async {
+        guard !isGeneratingInvite else { return }
+        isGeneratingInvite = true
+        defer { isGeneratingInvite = false }
+
+        do {
+            let link = try await crewService.generateInviteLink(partyId: partyId, role: "attendee", specialRole: nil)
+            inviteURL = URL(string: link)
+            if inviteURL != nil {
+                showShareSheet = true
+            } else {
+                UIPasteboard.general.string = link
+            }
+        } catch {
+            print("❌ Failed to generate invite link: \(error)")
+        }
+    }
     func attendeeRow(_ attendee: PartyAttendee) -> some View {
         Button(action: {
             print("👤 CrewTabView: Row tapped for \(attendee.fullName) - id: \(attendee.userId)")
