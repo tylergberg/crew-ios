@@ -243,9 +243,7 @@ final class FlightsService {
     func fetchFlights(partyId: UUID) async throws -> [String] { [] }
 }
 // PartyGamesService is now implemented in Shared/Services/PartyGamesService.swift
-final class GalleryService {
-    func fetchItems(partyId: UUID, page: Int, limit: Int) async throws -> [String] { [] }
-}
+// GalleryService is now implemented in Features/PartyDetail/Tabs/Gallery/Services/GalleryService.swift
 
 @MainActor
 final class GalleryStore: ObservableObject {

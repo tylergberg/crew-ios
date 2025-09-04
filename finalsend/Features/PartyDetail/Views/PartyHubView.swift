@@ -194,7 +194,7 @@ class PartyDataManager: ObservableObject {
         self.itineraryService = ItineraryService(supabase: SupabaseManager.shared.client)
         self.flightsService = FlightsService(supabase: SupabaseManager.shared.client)
         self.gamesService = PartyGamesService.shared
-        self.galleryService = GalleryService()
+        self.galleryService = GalleryService.shared
         self.galleryStore = GalleryStore(partyId: UUID(uuidString: partyId) ?? UUID(), currentUserId: UUID(uuidString: currentUserId) ?? UUID())
         self.cityLookupService = CityLookupService()
         
@@ -320,8 +320,8 @@ class PartyDataManager: ObservableObject {
         guard let partyUUID = UUID(uuidString: currentPartyId ?? "") else { return }
         
         do {
-            let items = try await galleryService?.fetchItems(partyId: partyUUID, page: 0, limit: 100) ?? []
-            galleryCount = items.count
+            await galleryService?.fetchGalleryItems(for: partyUUID)
+            galleryCount = galleryService?.galleryItems.count ?? 0
         } catch {
             print("❌ Error loading gallery items: \(error)")
             galleryCount = 0
@@ -758,7 +758,8 @@ struct PartyHubView: View {
         }
         .fullScreenCover(isPresented: $showGalleryModal) {
             GalleryTabView(
-                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee
+                userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee,
+                partyId: UUID(uuidString: partyId) ?? UUID()
             )
         }
         .fullScreenCover(isPresented: $showVendorsModal) {
