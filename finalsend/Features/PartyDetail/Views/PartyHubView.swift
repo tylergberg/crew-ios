@@ -744,7 +744,8 @@ struct PartyHubView: View {
             PackingTabView(
                 partyId: UUID(uuidString: partyId) ?? UUID(),
                 userRole: dataManager.attendees.first(where: { $0.isCurrentUser })?.role ?? .attendee,
-                currentUserId: UUID(uuidString: sessionManager.userProfile?.id ?? "") ?? UUID()
+                currentUserId: UUID(uuidString: sessionManager.userProfile?.id ?? "") ?? UUID(),
+                supabase: SupabaseManager.shared.client
             )
         }
         .fullScreenCover(isPresented: $showGamesModal) {
