@@ -69,3 +69,4 @@ extension GameQuestion {
         return PlaceholderReplacer.replacePlaceholders(in: self.questionForLiveGuest, using: game)
     }
 }
+

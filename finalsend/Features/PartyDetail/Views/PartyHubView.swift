@@ -678,7 +678,6 @@ struct PartyHubView: View {
             }
             .padding(.horizontal, 24)
             .padding(.top, 16) // Add top padding to avoid navigation bar
-            
         }
         .background(partyManager.currentTheme.cardBackgroundColor)
         .refreshable {

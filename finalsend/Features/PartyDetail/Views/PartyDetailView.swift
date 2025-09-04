@@ -30,70 +30,82 @@ struct PartyDetailView: View {
                 }
             } else {
                 VStack(spacing: 0) {
-                    // Navigation bar at the top
-                    HStack {
-                                            Button(action: {
-                        print("🔙 Back button tapped - dismissing party detail")
-                        // Post notification to dismiss the party detail view
-                        NotificationCenter.default.post(name: Notification.Name("dismissPartyDetail"), object: nil)
-                        dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
-                    }
-                        .padding(.leading, 20)
-                        .padding(.top, 10)
+                    // Navigation bar at the top - matching main view structure
+                    ZStack {
+                        // Center: Crew Logo (always centered)
+                        Image("crew-wordmark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 24)
                         
-                        Spacer()
-                        
-                        // Settings dropdown menu (only show for admin/organizer)
-                        if partyManager.isOrganizerOrAdmin {
-                            Menu {
-                                Button("Edit Party Details") {
-                                    // TODO: Open edit party sheet
-                                    print("Edit party details")
-                                }
-                                
-                                Button("Edit Cover Image") {
-                                    // TODO: Open cover image picker
-                                    print("Edit cover image")
-                                }
-                                
-                                Button("Edit Theme") {
-                                    showEditThemeSheet = true
-                                }
-                                
-                                Button("Edit Party Type") {
-                                    showEditPartyTypeSheet = true
-                                }
-                                
-                                Button("Manage Attendees") {
-                                    // TODO: Navigate to crew management
-                                    print("Manage attendees")
-                                }
-                                
-                                Divider()
-                                
-                                Button("Delete Party", role: .destructive) {
-                                    // TODO: Open delete confirmation
-                                    print("Delete party")
-                                }
-                            } label: {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(12)
-                                    .background(Color.black.opacity(0.3))
-                                    .clipShape(Circle())
+                        // Left: Back Button
+                        HStack {
+                            Button(action: {
+                                print("🔙 Back button tapped - dismissing party detail")
+                                // Post notification to dismiss the party detail view
+                                NotificationCenter.default.post(name: Notification.Name("dismissPartyDetail"), object: nil)
+                                dismiss()
+                            }) {
+                                Image(systemName: "arrowshape.backward.circle.fill")
+                                    .font(.system(size: 32, weight: .medium))
+                                    .foregroundColor(Color(hex: "#353E3E"))
                             }
-                            .padding(.trailing, 20)
-                            .padding(.top, 10)
+                            
+                            Spacer()
+                        }
+                        
+                        // Right: Settings Button (only show for admin/organizer)
+                        HStack {
+                            Spacer()
+                            
+                            if partyManager.isOrganizerOrAdmin {
+                                Menu {
+                                    Button("Edit Party Details") {
+                                        // TODO: Open edit party sheet
+                                        print("Edit party details")
+                                    }
+                                    
+                                    Button("Edit Cover Image") {
+                                        // TODO: Open cover image picker
+                                        print("Edit cover image")
+                                    }
+                                    
+                                    Button("Edit Theme") {
+                                        showEditThemeSheet = true
+                                    }
+                                    
+                                    Button("Edit Party Type") {
+                                        showEditPartyTypeSheet = true
+                                    }
+                                    
+                                    Button("Manage Attendees") {
+                                        // TODO: Navigate to crew management
+                                        print("Manage attendees")
+                                    }
+                                    
+                                    Divider()
+                                    
+                                    Button("Delete Party", role: .destructive) {
+                                        // TODO: Open delete confirmation
+                                        print("Delete party")
+                                    }
+                                } label: {
+                                    Image(systemName: "gearshape.circle.fill")
+                                        .font(.system(size: 32, weight: .medium))
+                                        .foregroundColor(Color(hex: "#353E3E"))
+                                }
+                            }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(Color.white)
+                    .overlay(
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(Color.gray.opacity(0.2)),
+                        alignment: .bottom
+                    )
                     .zIndex(1) // Ensure navigation is above content
                     
                     // Direct PartyHubView without tab navigation
