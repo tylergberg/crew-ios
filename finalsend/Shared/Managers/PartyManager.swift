@@ -67,6 +67,31 @@ extension PartyModel {
                 city: cityName,
                 stateOrProvince: partyCity.state_or_province,
                 country: countryName,
+                region: nil,
+                tags: nil,
+                recommendedSeasons: nil,
+                avgGroupSizeMin: nil,
+                avgGroupSizeMax: nil,
+                budgetLevel: nil,
+                flightAccessibilityScore: nil,
+                avgFlightCost: nil,
+                weatherReliabilityScore: nil,
+                safetyLevel: nil,
+                jetLagRisk: nil,
+                walkabilityScore: nil,
+                partySceneHype: nil,
+                activityDensityScore: nil,
+                luxuryOptionsAvailable: nil,
+                popularFor: nil,
+                uniqueSellingPoint: nil,
+                popularEvents: nil,
+                passportRequired: nil,
+                imageUrl: nil,
+                isActive: nil,
+                createdAt: nil,
+                updatedAt: nil,
+                averageHighTemperaturesByMonth: nil,
+                averageLowTemperaturesByMonth: nil,
                 timezone: timezoneString,
                 latitude: nil,
                 longitude: nil
@@ -175,9 +200,7 @@ class PartyManager: ObservableObject {
     // MARK: - Theme Management
     
     var currentTheme: PartyTheme {
-        let theme = PartyTheme.allThemes.first { $0.id == themeId } ?? .default
-        print("🔍 PartyManager.currentTheme - themeId: \(themeId), found theme: \(theme.id)")
-        return theme
+        return PartyTheme.allThemes.first { $0.id == themeId } ?? .default
     }
     
     func updateTheme(_ theme: PartyTheme) {
@@ -196,8 +219,6 @@ class PartyManager: ObservableObject {
     }
     
     var isOrganizerOrAdmin: Bool {
-        let isAdminOrOrg = role == "admin" || role == "organizer"
-        print("🔍 PartyManager.isOrganizerOrAdmin - role: \(role ?? "nil"), isAdminOrOrg: \(isAdminOrOrg)")
-        return isAdminOrOrg
+        return role == "admin" || role == "organizer"
     }
 }

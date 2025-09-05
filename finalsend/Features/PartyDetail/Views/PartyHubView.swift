@@ -820,8 +820,8 @@ struct PartyHubView: View {
             .environmentObject(partyManager)
         }
         
-        .sheet(isPresented: $showEditLocationModal) {
-            EditLocationSheet(onSaved: {
+        .navigationDestination(isPresented: $showEditLocationModal) {
+            EnhancedLocationSelectorView(onSaved: {
                 Task {
                     await dataManager.refreshData()
                 }

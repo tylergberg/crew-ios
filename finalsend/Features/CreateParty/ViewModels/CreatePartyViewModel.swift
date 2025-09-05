@@ -4,7 +4,7 @@ import SwiftUI
 
 // MARK: - Wizard Step Enum
 enum CreatePartyStep: Int, CaseIterable {
-    case type, name, dates, vibe, cover, review
+    case type, name, dates, location, vibe, cover, review
 }
 
 @MainActor
@@ -13,6 +13,7 @@ class CreatePartyViewModel: ObservableObject {
     @Published var draft = PartyDraft()
     @Published var isSubmitting = false
     @Published var availableCities: [CityModel] = []
+    @Published var selectedCity: CityModel?
     @Published var searchQuery = ""
     @Published var errorMessage: String?
     @Published var showSuccessToast = false
@@ -57,7 +58,10 @@ class CreatePartyViewModel: ObservableObject {
         self.appNavigator = appNavigator ?? AppNavigator.shared
         
         setupSearchDebouncing()
-        loadInitialCities()
+        // Load cities in background without blocking UI
+        Task.detached { [weak self] in
+            await self?.loadInitialCities()
+        }
     }
     
     // MARK: - PartyManager Update
@@ -96,7 +100,7 @@ class CreatePartyViewModel: ObservableObject {
             return !draft.partyType.isEmpty
         case .name:
             return !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .dates, .vibe, .cover:
+        case .dates, .location, .vibe, .cover:
             return true // Optional steps
         case .review:
             return draft.isValid
@@ -163,6 +167,22 @@ class CreatePartyViewModel: ObservableObject {
         }
     }
     
+    /// Loads the newly created party data into PartyManager
+    private func loadNewlyCreatedParty(partyId: UUID) async {
+        do {
+            // Fetch the party data from the server
+            let partyData = try await partyCreationService.fetchParty(partyId: partyId)
+            
+            // Load the data into PartyManager with admin role (since they're the creator)
+            partyManager.load(from: partyData, role: "admin")
+            
+            print("✅ CreatePartyViewModel: Loaded newly created party data into PartyManager")
+        } catch {
+            print("❌ CreatePartyViewModel: Failed to load newly created party data: \(error)")
+            // Don't fail the entire creation process for this
+        }
+    }
+    
     /// Submits the party creation form (reused from original)
     func createParty() async {
         guard isFormValid && !isSubmitting && !partyCreatedSuccessfully else { return }
@@ -188,7 +208,10 @@ class CreatePartyViewModel: ObservableObject {
             
             // 3. Special role assignment removed - no longer asking about guest of honor
             
-            // 4. Set active party and navigate
+            // 4. Load the newly created party data into PartyManager
+            await loadNewlyCreatedParty(partyId: partyId)
+            
+            // 5. Set active party and navigate
             partyManager.partyId = partyId.uuidString
             
             // 5. Fire analytics (placeholder for now)
@@ -199,11 +222,15 @@ class CreatePartyViewModel: ObservableObject {
             showSuccessToast = true
             print("🎯 Party created successfully, setting showSuccessToast = true")
             
-            // 7. Navigate to the new party detail view
-            appNavigator.navigateToParty(partyId.uuidString, openChat: false)
-            
-            // 8. Post notification to refresh dashboard
+            // 7. Post notification to refresh dashboard first
             NotificationCenter.default.post(name: .refreshPartyData, object: nil)
+            
+            // 8. Add a small delay to ensure party data is loaded, then navigate
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                print("🎯 CreatePartyViewModel: Navigating to party \(partyId.uuidString)")
+                self.appNavigator.navigateToParty(partyId.uuidString, openChat: false)
+                print("🎯 CreatePartyViewModel: Navigation call completed, route: \(self.appNavigator.route)")
+            }
             
             // Reset submitting state after successful creation
             isSubmitting = false
@@ -233,18 +260,50 @@ class CreatePartyViewModel: ObservableObject {
     
     private func loadInitialCities() {
         Task {
+            // Add a small delay to prevent blocking the UI during initialization
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             await performCitySearch(query: "")
         }
     }
     
     private func performCitySearch(query: String) async {
         do {
-            let cities = try await citySearchService.searchCities(query: query)
+            // Add timeout to prevent hanging
+            let cities = try await withTimeout(seconds: 5) {
+                try await self.citySearchService.searchCities(query: query)
+            }
             availableCities = cities
         } catch {
             print("❌ City search failed: \(error)")
             // Don't show error to user for search failures
+            // Set empty array to prevent UI issues
+            availableCities = []
         }
+    }
+    
+    // Helper function to add timeout to async operations
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            
+            guard let result = try await group.next() else {
+                throw TimeoutError()
+            }
+            
+            group.cancelAll()
+            return result
+        }
+    }
+    // Simple timeout error
+    private struct TimeoutError: Error {
+        let message = "Operation timed out"
     }
     
     private func fireAnalytics(partyId: UUID) {

@@ -169,24 +169,18 @@ struct EditLocationSheet: View {
             // Load the current city by ID first
             let currentCity = try await citySearchService.getCityById(currentCityId)
             
-            // Load some popular cities for the list
-            let popularCities = try await citySearchService.getPopularCities()
+            // Load all cities for the list
+            let allCities = try await citySearchService.fetchAllCities()
             
             await MainActor.run {
-                // Combine current city with popular cities, ensuring current city is first
-                var allCities: [CityModel] = []
+                // Set available cities and pre-select current city if found
+                availableCities = allCities
                 
                 if let current = currentCity {
-                    allCities.append(current)
                     selectedCity = current
                     print("✅ [EditLocationSheet] Loaded and selected current city: \(current.displayName)")
                 }
                 
-                // Add popular cities that aren't the current city
-                let otherCities = popularCities.filter { $0.id != currentCityId }
-                allCities.append(contentsOf: Array(otherCities.prefix(10)))
-                
-                availableCities = allCities
                 isLoading = false
             }
             
@@ -261,7 +255,7 @@ struct EditLocationSheet: View {
                     // Update the party manager
                     partyManager.cityId = city.id
                     partyManager.location = city.displayName
-                    partyManager.timezone = city.timezone
+                    partyManager.timezone = city.timezone ?? "UTC"
                     
                     // Call onSaved callback
                     onSaved()

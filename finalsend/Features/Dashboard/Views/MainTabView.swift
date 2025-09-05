@@ -20,6 +20,9 @@ struct MainTabView: View {
     @State private var currentUserId: String? = nil
     @State private var unreadTaskCount: Int = 0
     @StateObject private var authManager = AuthManager.shared
+    
+    // Pre-calculated menu items to avoid computation on first touch
+    @State private var cachedMenuItems: [PartyTab: String] = [:]
 
     
     var body: some View {
@@ -87,6 +90,8 @@ struct MainTabView: View {
         }
         .onAppear {
             print("🔍 MainTabView: onAppear called")
+            // Pre-calculate menu items immediately
+            updateCachedMenuItems()
             Task {
                 // Skip profile loading if user needs name collection (new user)
                 if !authManager.needsNameCollection {
@@ -121,6 +126,8 @@ struct MainTabView: View {
             if let counts = notification.userInfo?["counts"] as? [PartyTab: Int] {
                 partyCounts = counts
                 print("🔍 MainTabView: Updated party counts - \(counts)")
+                // Pre-calculate menu items to avoid computation on first touch
+                updateCachedMenuItems()
             }
         }
         .onChange(of: selectedTab) { _ in
@@ -205,7 +212,7 @@ struct MainTabView: View {
                         selectedTab = tab
                     }) {
                         HStack {
-                            Text("\(tab.rawValue) (\(partyCounts[tab] ?? 0))")
+                            Text(cachedMenuItems[tab] ?? "\(tab.rawValue) (0)")
                             if selectedTab == tab {
                                 Image(systemName: "checkmark")
                             }
@@ -257,6 +264,14 @@ struct MainTabView: View {
         // This function is called when parties are loaded, but the actual counts
         // should be sent by PartiesTabView, not calculated here
         print("🔍 MainTabView: Waiting for party counts from PartiesTabView")
+    }
+    
+    private func updateCachedMenuItems() {
+        // Pre-calculate menu item labels to avoid computation on first touch
+        for tab in availableTabs {
+            let count = partyCounts[tab] ?? 0
+            cachedMenuItems[tab] = "\(tab.rawValue) (\(count))"
+        }
     }
 }
 

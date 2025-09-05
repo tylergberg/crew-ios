@@ -2,7 +2,6 @@ import SwiftUI
 
 struct StepPartyNameView: View {
     @ObservedObject var viewModel: CreatePartyViewModel
-    @FocusState private var isNameFieldFocused: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -30,7 +29,6 @@ struct StepPartyNameView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.outlineBlack.opacity(0.1), lineWidth: 1)
                     )
-                    .focused($isNameFieldFocused)
                 
                 if !viewModel.isNameValid && !viewModel.draft.name.isEmpty {
                     Text("Name must be at least 2 characters.")
@@ -40,10 +38,6 @@ struct StepPartyNameView: View {
             }
             
             Spacer()
-        }
-        .onAppear {
-            // Automatically focus the name field when the view appears
-            isNameFieldFocused = true
         }
     }
 }
