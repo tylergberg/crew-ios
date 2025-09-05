@@ -146,37 +146,7 @@ struct MainTabView: View {
     
     private var topNavigationHeader: some View {
         HStack {
-            // Left: Filter Button
-            Menu {
-                ForEach(availableTabs, id: \.self) { tab in
-                    Button(action: {
-                        selectedTab = tab
-                    }) {
-                        HStack {
-                            Text("\(tab.rawValue) (\(partyCounts[tab] ?? 0))")
-                            if selectedTab == tab {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                    .font(.system(size: 32, weight: .medium))
-                    .foregroundColor(Color(hex: "#353E3E"))
-            }
-            
-            Spacer()
-            
-            // Center: Crew Logo
-            Image("crew-wordmark")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 24)
-            
-            Spacer()
-            
-            // Right: Profile Button only
+            // Left: Profile Button
             Button(action: {
                 showingProfile = true
             }) {
@@ -216,6 +186,36 @@ struct MainTabView: View {
                             .offset(x: 12, y: -12)
                     }
                 }
+            }
+            
+            Spacer()
+            
+            // Center: Crew Logo
+            Image("crew-wordmark")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 24)
+            
+            Spacer()
+            
+            // Right: Filter Button
+            Menu {
+                ForEach(availableTabs, id: \.self) { tab in
+                    Button(action: {
+                        selectedTab = tab
+                    }) {
+                        HStack {
+                            Text("\(tab.rawValue) (\(partyCounts[tab] ?? 0))")
+                            if selectedTab == tab {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundColor(Color(hex: "#353E3E"))
             }
         }
         .padding(.horizontal, 20)

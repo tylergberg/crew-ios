@@ -1,7 +1,7 @@
 struct PartyModel: Codable {
     let id: UUID
     let name: String
-    let description_: String?
+    let description: String?
     let start_date: Date?
     let end_date: Date?
     let location: String?
@@ -22,7 +22,7 @@ extension PartyModel {
         
         self.id = party.id
         self.name = party.name
-        self.description_ = nil
+        self.description = party.description
         
         // Parse date fields (stored as date, not timestamp)
         let dateFormatter = DateFormatter()
@@ -137,7 +137,7 @@ class PartyManager: ObservableObject {
         print("🔍 PartyManager.load() - data.theme_id: \(data.theme_id ?? "nil"), role: \(role ?? "nil")")
         
         self.name = data.name
-        self.description = data.description_ ?? ""
+        self.description = data.description ?? ""
         self.startDate = data.start_date ?? Date()
         self.endDate = data.end_date ?? Date()
         self.location = data.location ?? ""

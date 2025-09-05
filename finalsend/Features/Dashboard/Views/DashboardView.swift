@@ -312,7 +312,7 @@ struct DashboardView: View {
                                     // Step 2: Fetch party info for those IDs with city data
                 let fetchedParties: [Party] = try await client
                     .from("parties")
-                    .select("id, name, start_date, end_date, cover_image_url, theme_id, party_type, party_vibe_tags, cities(id, city, state_or_province, country, timezone)")
+                    .select("id, name, description, start_date, end_date, cover_image_url, theme_id, party_type, party_vibe_tags, cities(id, city, state_or_province, country, timezone)")
                     .in("id", values: partyIds.map { $0.uuidString })
                     .execute()
                     .value
@@ -363,6 +363,7 @@ struct DashboardView: View {
                         let partyWithAttendees = Party(
                             id: party.id,
                             name: party.name,
+                            description: party.description,
                             startDate: party.startDate,
                             endDate: party.endDate,
                             city: party.city,
@@ -609,6 +610,7 @@ struct DashboardView: View {
 struct Party: Identifiable, Decodable {
     let id: UUID
     let name: String
+    let description: String?
     let startDate: String?
     let endDate: String?
     let city: PartyCity?
@@ -621,6 +623,7 @@ struct Party: Identifiable, Decodable {
     enum CodingKeys: String, CodingKey {
         case id
         case name
+        case description
         case startDate = "start_date"
         case endDate = "end_date"
         case coverImageURL = "cover_image_url"
@@ -634,6 +637,7 @@ struct Party: Identifiable, Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.name = try container.decode(String.self, forKey: .name)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
         self.startDate = try container.decodeIfPresent(String.self, forKey: .startDate)
         self.endDate = try container.decodeIfPresent(String.self, forKey: .endDate)
         self.coverImageURL = try container.decodeIfPresent(String.self, forKey: .coverImageURL)
@@ -645,9 +649,10 @@ struct Party: Identifiable, Decodable {
     }
     
     // Custom initializer for creating instances with attendees
-    init(id: UUID, name: String, startDate: String?, endDate: String?, city: PartyCity?, coverImageURL: String?, attendees: [DashboardAttendee]?, themeId: String? = "default", partyType: String? = nil, vibeTags: [String]? = nil) {
+    init(id: UUID, name: String, description: String? = nil, startDate: String?, endDate: String?, city: PartyCity?, coverImageURL: String?, attendees: [DashboardAttendee]?, themeId: String? = "default", partyType: String? = nil, vibeTags: [String]? = nil) {
         self.id = id
         self.name = name
+        self.description = description
         self.startDate = startDate
         self.endDate = endDate
         self.city = city

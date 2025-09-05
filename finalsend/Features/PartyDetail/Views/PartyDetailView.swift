@@ -6,7 +6,8 @@ struct PartyDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showSettings = false
     @State private var showEditThemeSheet = false
-    @State private var showEditPartyTypeSheet = false
+    @State private var showEditPartyDetailsSheet = false
+    @State private var showEditCoverImageSheet = false
     @State private var isLoading = true
 
     @EnvironmentObject var partyManager: PartyManager
@@ -61,26 +62,15 @@ struct PartyDetailView: View {
                             if partyManager.isOrganizerOrAdmin {
                                 Menu {
                                     Button("Edit Party Details") {
-                                        // TODO: Open edit party sheet
-                                        print("Edit party details")
+                                        showEditPartyDetailsSheet = true
                                     }
                                     
                                     Button("Edit Cover Image") {
-                                        // TODO: Open cover image picker
-                                        print("Edit cover image")
+                                        showEditCoverImageSheet = true
                                     }
                                     
                                     Button("Edit Theme") {
                                         showEditThemeSheet = true
-                                    }
-                                    
-                                    Button("Edit Party Type") {
-                                        showEditPartyTypeSheet = true
-                                    }
-                                    
-                                    Button("Manage Attendees") {
-                                        // TODO: Navigate to crew management
-                                        print("Manage attendees")
                                     }
                                     
                                     Divider()
@@ -99,7 +89,7 @@ struct PartyDetailView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
-                    .background(Color.white)
+                    .background(partyManager.currentTheme.cardBackgroundColor)
                     .overlay(
                         Rectangle()
                             .frame(height: 1)
@@ -128,8 +118,15 @@ struct PartyDetailView: View {
                 }
             )
         }
-        .sheet(isPresented: $showEditPartyTypeSheet) {
-            EditPartyTypeSheet(
+        .sheet(isPresented: $showEditPartyDetailsSheet) {
+            EditPartyDetailsSheet(
+                onSaved: {
+                    NotificationCenter.default.post(name: Notification.Name("refreshPartyData"), object: nil)
+                }
+            )
+        }
+        .sheet(isPresented: $showEditCoverImageSheet) {
+            EditCoverImageSheet(
                 onSaved: {
                     NotificationCenter.default.post(name: Notification.Name("refreshPartyData"), object: nil)
                 }

@@ -134,15 +134,38 @@ struct PartyThemeView: View {
     private func saveTheme() {
         isSaving = true
         
-        // Update the party theme in PartyManager
-        partyManager.updateTheme(selectedTheme)
-        
-        // TODO: Save to database
-        // This would typically involve calling a service to update the party's theme_id
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            isSaving = false
-            dismiss()
+        Task {
+            do {
+                // Save to database using PartyManagementService
+                let updates = ["theme_id": selectedTheme.id]
+                let partyManagementService = PartyManagementService()
+                let success = try await partyManagementService.updateParty(
+                    partyId: partyManager.partyId, 
+                    updates: updates
+                )
+                
+                if success {
+                    // Update the party theme in PartyManager
+                    partyManager.updateTheme(selectedTheme)
+                    
+                    // Dismiss the sheet
+                    await MainActor.run {
+                        isSaving = false
+                        dismiss()
+                    }
+                } else {
+                    // Handle failure
+                    print("❌ Failed to update party theme in database")
+                    await MainActor.run {
+                        isSaving = false
+                    }
+                }
+            } catch {
+                print("❌ Error updating party theme: \(error)")
+                await MainActor.run {
+                    isSaving = false
+                }
+            }
         }
     }
 }
