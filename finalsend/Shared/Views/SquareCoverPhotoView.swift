@@ -7,6 +7,8 @@ struct SquareCoverPhotoView: View {
     let placeholderIcon: String
     let placeholderText: String?
     
+    @State private var versionTick: Int = 0
+    
     init(
         imageURL: String?,
         size: CGFloat = 200,
@@ -37,8 +39,8 @@ struct SquareCoverPhotoView: View {
     
     var body: some View {
         Group {
-            if let imageURL = imageURL, !imageURL.isEmpty {
-                AsyncImage(url: URL(string: imageURL)) { image in
+            if let versionedURL = versionedImageURL {
+                AsyncImage(url: URL(string: versionedURL)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -54,6 +56,18 @@ struct SquareCoverPhotoView: View {
                     .cornerRadius(cornerRadius)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .refreshPartyData)) { _ in
+            // Increment version tick when party data is refreshed to force image reload
+            versionTick &+= 1
+        }
+    }
+    
+    private var versionedImageURL: String? {
+        guard let imageURL = imageURL, !imageURL.isEmpty else { return imageURL }
+        
+        // Add version parameter to force cache refresh
+        let separator = imageURL.contains("?") ? "&" : "?"
+        return "\(imageURL)\(separator)v=\(versionTick)"
     }
     
     @ViewBuilder

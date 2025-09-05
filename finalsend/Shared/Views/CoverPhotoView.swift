@@ -8,6 +8,8 @@ struct CoverPhotoView: View {
     let placeholderIcon: String
     let placeholderText: String?
     
+    @State private var versionTick: Int = 0
+    
     init(
         imageURL: String?,
         width: CGFloat,
@@ -25,7 +27,7 @@ struct CoverPhotoView: View {
     }
     
     var body: some View {
-        CachedAsyncImage(url: imageURL) { image in
+        CachedAsyncImage(url: versionedImageURL) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -37,7 +39,18 @@ struct CoverPhotoView: View {
                 .frame(width: width, height: height)
                 .cornerRadius(cornerRadius)
         }
-
+        .onReceive(NotificationCenter.default.publisher(for: .refreshPartyData)) { _ in
+            // Increment version tick when party data is refreshed to force image reload
+            versionTick &+= 1
+        }
+    }
+    
+    private var versionedImageURL: String? {
+        guard let imageURL = imageURL, !imageURL.isEmpty else { return imageURL }
+        
+        // Add version parameter to force cache refresh
+        let separator = imageURL.contains("?") ? "&" : "?"
+        return "\(imageURL)\(separator)v=\(versionTick)"
     }
     
     @ViewBuilder
