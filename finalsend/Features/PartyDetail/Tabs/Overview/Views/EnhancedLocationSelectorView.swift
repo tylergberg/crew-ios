@@ -32,123 +32,107 @@ struct EnhancedLocationSelectorView: View {
     }
     
     var body: some View {
-        ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Choose Your Party Location")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.titleDark)
-                        
-                        Text("Select from our curated Crew cities or explore other destinations")
-                            .font(.subheadline)
-                            .foregroundColor(.metaGrey)
-                    }
-                    .padding(.horizontal)
+        VStack(spacing: 0) {
+                // Sticky Search Bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.metaGrey)
                     
-                    if isLoading {
-                        VStack(spacing: 16) {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading cities...")
-                                .foregroundColor(.metaGrey)
+                    TextField("Search cities...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .onChange(of: searchQuery) { query in
+                            filterCities(query: query)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
-                        // Cities Section
-                        if !allCities.isEmpty {
-                            VStack(alignment: .leading, spacing: 16) {
-                                HStack {
-                                    Text("🌍 Available Cities")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.titleDark)
-                                    
-                                    Spacer()
-                                    
-                                    Text("\(filteredCities.count) cities")
-                                        .font(.caption)
-                                        .foregroundColor(.metaGrey)
-                                }
-                                .padding(.horizontal)
-                                
-                                // Search Bar
-                                HStack {
-                                    Image(systemName: "magnifyingglass")
-                                        .foregroundColor(.metaGrey)
-                                    
-                                    TextField("Search cities...", text: $searchQuery)
-                                        .textFieldStyle(PlainTextFieldStyle())
-                                        .onChange(of: searchQuery) { query in
-                                            filterCities(query: query)
-                                        }
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .padding(.horizontal)
-                                
-                                LazyVStack(spacing: 12) {
-                                    ForEach(filteredCities) { city in
-                                        CityCardView(
-                                            city: city,
-                                            isSelected: selectedCity?.id == city.id,
-                                            onTap: {
-                                                selectedCity = city
-                                            },
-                                            onDetailTap: {
-                                                selectedCityForDetail = city
-                                                showingCityDetail = true
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                
+                // Scrollable Cities List
+                ScrollView {
+                    VStack(spacing: 0) {
+                        if isLoading {
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .scaleEffect(1.2)
+                                Text("Loading cities...")
+                                    .foregroundColor(.metaGrey)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                        } else if !allCities.isEmpty {
+                            LazyVStack(spacing: 0) {
+                                ForEach(filteredCities) { city in
+                                    Button(action: {
+                                        selectedCity = city
+                                    }) {
+                                        HStack {
+                                            Text("\(city.city) (\(city.country))")
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.titleDark)
+                                            
+                                            Spacer()
+                                            
+                                            if selectedCity?.id == city.id {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.blue)
+                                                    .font(.system(size: 20))
                                             }
-                                        )
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 12)
+                                        .background(selectedCity?.id == city.id ? Color.blue.opacity(0.1) : Color.clear)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    if city.id != filteredCities.last?.id {
+                                        Divider()
+                                            .padding(.leading, 16)
                                     }
                                 }
-                                .padding(.horizontal)
                             }
-                        }
-                        
-                        // Error Message
-                        if let errorMessage = errorMessage {
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.outlineBlack.opacity(0.1), lineWidth: 1)
+                            )
+                            .padding(.horizontal)
+                            .padding(.bottom, 16)
+                        } else if let errorMessage = errorMessage {
                             Text(errorMessage)
                                 .foregroundColor(.red)
                                 .font(.caption)
                                 .padding(.horizontal)
+                                .padding(.top, 16)
                         }
                     }
                 }
-                .padding(.vertical)
             }
-            .navigationTitle("Location")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Filter") {
-                        showingFilters = true
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveSelectedCity()
-                    }
-                    .disabled(selectedCity == nil || isSaving)
+        .navigationTitle("Location")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    dismiss()
                 }
             }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Save") {
+                    saveSelectedCity()
+                }
+                .disabled(selectedCity == nil || isSaving)
+            }
+        }
         .onAppear {
             loadCities()
-        }
-        .sheet(isPresented: $showingFilters) {
-            CityFilterView()
-        }
-        .sheet(isPresented: $showingCityDetail) {
-            if let city = selectedCityForDetail {
-                CityDetailView(city: city) { selectedCity in
-                    self.selectedCity = selectedCity
-                }
-            }
         }
     }
     
@@ -269,3 +253,4 @@ struct CityFilterView: View {
     }
     .environmentObject(PartyManager())
 }
+

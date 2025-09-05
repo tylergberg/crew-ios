@@ -820,13 +820,15 @@ struct PartyHubView: View {
             .environmentObject(partyManager)
         }
         
-        .navigationDestination(isPresented: $showEditLocationModal) {
-            EnhancedLocationSelectorView(onSaved: {
-                Task {
-                    await dataManager.refreshData()
-                }
-            })
-            .environmentObject(partyManager)
+        .fullScreenCover(isPresented: $showEditLocationModal) {
+            NavigationView {
+                EnhancedLocationSelectorView(onSaved: {
+                    Task {
+                        await dataManager.refreshData()
+                    }
+                })
+                .environmentObject(partyManager)
+            }
         }
 
         .sheet(isPresented: $showEditPartyVibeModal) {
