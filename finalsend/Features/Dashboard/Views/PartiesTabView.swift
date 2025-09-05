@@ -232,7 +232,6 @@ struct PartiesTabView: View {
                     .value
 
                 // Step 3: Fetch all attendee data for all parties in a single query
-                print("🔍 [fetchParties] Fetching attendees for \(partyIds.count) parties")
                 let allAttendees: [DashboardAttendeeWithPartyId] = try await client
                     .from("party_members")
                     .select("""
@@ -251,7 +250,6 @@ struct PartiesTabView: View {
                     .execute()
                     .value
                 
-                print("🔍 [fetchParties] Fetched \(allAttendees.count) attendees")
                 
                 // Group attendees by party_id
                 var attendeesByPartyId: [UUID: [DashboardAttendee]] = [:]
@@ -273,13 +271,6 @@ struct PartiesTabView: View {
                     }
                     attendeesByPartyId[attendee.partyId]?.append(dashboardAttendee)
                     
-                    // Debug logging for current user
-                    if isCurrentUser {
-                        print("🔍 [fetchParties] Current user attendee - Party: \(attendee.fullName), Status: \(attendee.status), isCurrentUser: true")
-                    }
-                    
-                    // Debug logging for all attendees
-                    print("🔍 [fetchParties] Attendee - User: \(attendee.fullName), Status: \(attendee.status), isCurrentUser: \(isCurrentUser), userId: \(attendee.userId), currentUserId: \(user.id.uuidString)")
                 }
                 
                 // Create parties with their attendees
@@ -348,22 +339,15 @@ struct PartiesTabView: View {
             // Check if current user has declined this party
             let currentUserHasDeclined = party.attendees?.contains { attendee in
                 let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
-                if attendee.isCurrentUser {
-                    print("🔍 Party '\(party.name)' - Current user status: \(attendee.status), isDeclined: \(isDeclined)")
-                }
                 return isDeclined
             } ?? false
             
             // Check if current user has pending status for this party
             let currentUserHasPending = party.attendees?.contains { attendee in
                 let isPending = attendee.isCurrentUser && attendee.status == "pending"
-                if attendee.isCurrentUser {
-                    print("🔍 Party '\(party.name)' - Current user status: \(attendee.status), isPending: \(isPending)")
-                }
                 return isPending
             } ?? false
             
-            print("🔍 Party '\(party.name)' - currentUserHasDeclined: \(currentUserHasDeclined), currentUserHasPending: \(currentUserHasPending), selectedTab: \(selectedTab)")
             
             // Handle parties without dates - show them only in Upcoming
             guard let start = start, let end = end else {
@@ -492,30 +476,21 @@ struct PartiesTabView: View {
             // Check if current user has declined this party
             let currentUserHasDeclined = party.attendees?.contains { attendee in
                 let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
-                if attendee.isCurrentUser {
-                    print("🔍 [sendPartyCounts] Party '\(party.name)' - Current user status: \(attendee.status), isDeclined: \(isDeclined)")
-                }
                 return isDeclined
             } ?? false
             
             // Check if current user has pending status for this party
             let currentUserHasPending = party.attendees?.contains { attendee in
                 let isPending = attendee.isCurrentUser && attendee.status == "pending"
-                if attendee.isCurrentUser {
-                    print("🔍 [sendPartyCounts] Party '\(party.name)' - Current user status: \(attendee.status), isPending: \(isPending)")
-                }
                 return isPending
             } ?? false
             
-            print("🔍 [sendPartyCounts] Party '\(party.name)' - currentUserHasDeclined: \(currentUserHasDeclined), currentUserHasPending: \(currentUserHasPending)")
             
             if currentUserHasDeclined {
                 if let end = end, end < now {
                     counts[.didntgo]? += 1
-                    print("🔍 [sendPartyCounts] Declined but past, added to didn't go: \(party.name)")
                 } else {
                     counts[.declined]? += 1
-                    print("🔍 [sendPartyCounts] Added to declined count: \(party.name)")
                 }
                 continue // Skip counting in other categories
             }
@@ -523,10 +498,8 @@ struct PartiesTabView: View {
             if currentUserHasPending {
                 if let end = end, end < now {
                     counts[.didntgo]? += 1
-                    print("🔍 [sendPartyCounts] Pending but past, added to didn't go: \(party.name)")
                 } else {
                     counts[.pending]? += 1
-                    print("🔍 [sendPartyCounts] Added to pending count: \(party.name)")
                 }
                 continue // Skip counting in other categories
             }

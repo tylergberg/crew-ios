@@ -18,6 +18,7 @@ enum CitySearchError: Error, LocalizedError {
 protocol CitySearchServiceType {
     func fetchAllCities() async throws -> [CityModel]
     func searchCities(query: String) async throws -> [CityModel]
+    func getCityById(_ cityId: UUID) async throws -> CityModel?
 }
 
 class CitySearchService: CitySearchServiceType {
@@ -32,9 +33,10 @@ class CitySearchService: CitySearchServiceType {
         do {
             let cities: [CityModel] = try await client
                 .from("cities")
-                .select("id, city, state_or_province, country, timezone")
+                .select("id, city, state_or_province, country, region, tags, recommended_seasons, avg_group_size_min, avg_group_size_max, budget_level, flight_accessibility_score, avg_flight_cost, weather_reliability_score, safety_level, jet_lag_risk, walkability_score, party_scene_hype, activity_density_score, luxury_options_available, popular_for, unique_selling_point, popular_events, passport_required, image_url, is_active, created_at, updated_at, average_high_temperatures_by_month, average_low_temperatures_by_month, timezone, latitude, longitude")
+                .eq("is_active", value: true)
                 .order("city", ascending: true)
-                .limit(20)
+                .limit(50)
                 .execute()
                 .value
             
@@ -51,58 +53,55 @@ class CitySearchService: CitySearchServiceType {
             return try await fetchAllCities()
         }
         
+        let searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Search across multiple fields using a more robust approach
+        var cities: [CityModel] = []
+        
+        // First try exact city match
         do {
-            let searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // Search across multiple fields using a more robust approach
-            var cities: [CityModel] = []
-            
-            // First try exact city match
+            let exactMatches: [CityModel] = try await client
+                .from("cities")
+                .select("id, city, state_or_province, country, region, tags, recommended_seasons, avg_group_size_min, avg_group_size_max, budget_level, flight_accessibility_score, avg_flight_cost, weather_reliability_score, safety_level, jet_lag_risk, walkability_score, party_scene_hype, activity_density_score, luxury_options_available, popular_for, unique_selling_point, popular_events, passport_required, image_url, is_active, created_at, updated_at, average_high_temperatures_by_month, average_low_temperatures_by_month, timezone, latitude, longitude")
+                .eq("is_active", value: true)
+                .ilike("city", pattern: "%\(searchQuery)%")
+                .order("city", ascending: true)
+                .limit(10)
+                .execute()
+                .value
+            cities.append(contentsOf: exactMatches)
+        } catch {
+            print("⚠️ Exact city search failed: \(error)")
+        }
+        
+        // Then try state/province matches if we don't have enough results
+        if cities.count < 10 {
             do {
-                let exactMatches: [CityModel] = try await client
+                let stateMatches: [CityModel] = try await client
                     .from("cities")
-                    .select("id, city, state_or_province, country, timezone")
-                    .ilike("city", pattern: "%\(searchQuery)%")
+                    .select("id, city, state_or_province, country, region, tags, recommended_seasons, avg_group_size_min, avg_group_size_max, budget_level, flight_accessibility_score, avg_flight_cost, weather_reliability_score, safety_level, jet_lag_risk, walkability_score, party_scene_hype, activity_density_score, luxury_options_available, popular_for, unique_selling_point, popular_events, passport_required, image_url, is_active, created_at, updated_at, average_high_temperatures_by_month, average_low_temperatures_by_month, timezone, latitude, longitude")
+                    .eq("is_active", value: true)
+                    .ilike("state_or_province", pattern: "%\(searchQuery)%")
                     .order("city", ascending: true)
-                    .limit(10)
+                    .limit(10 - cities.count)
                     .execute()
                     .value
-                cities.append(contentsOf: exactMatches)
+                cities.append(contentsOf: stateMatches)
             } catch {
-                print("⚠️ Exact city search failed: \(error)")
+                print("⚠️ State search failed: \(error)")
             }
-            
-            // Then try state/province matches if we don't have enough results
-            if cities.count < 10 {
-                do {
-                    let stateMatches: [CityModel] = try await client
-                        .from("cities")
-                        .select("id, city, state_or_province, country, timezone")
-                        .ilike("state_or_province", pattern: "%\(searchQuery)%")
-                        .order("city", ascending: true)
-                        .limit(10 - cities.count)
-                        .execute()
-                        .value
-                    cities.append(contentsOf: stateMatches)
-                } catch {
-                    print("⚠️ State search failed: \(error)")
-                }
-            }
-            
-            // Remove duplicates and limit results
-            let uniqueCities = Array(Set(cities)).prefix(20)
-            return Array(uniqueCities)
-        } catch {
-            print("❌ Error searching cities: \(error)")
-            throw CitySearchError.networkError(error)
         }
+        
+        // Remove duplicates and limit results
+        let uniqueCities = Array(Set(cities)).prefix(20)
+        return Array(uniqueCities)
     }
     
     func getCityById(_ cityId: UUID) async throws -> CityModel? {
         do {
             let cities: [CityModel] = try await client
                 .from("cities")
-                .select("id, city, state_or_province, country, timezone")
+                .select("id, city, state_or_province, country, region, tags, recommended_seasons, avg_group_size_min, avg_group_size_max, budget_level, flight_accessibility_score, avg_flight_cost, weather_reliability_score, safety_level, jet_lag_risk, walkability_score, party_scene_hype, activity_density_score, luxury_options_available, popular_for, unique_selling_point, popular_events, passport_required, image_url, is_active, created_at, updated_at, average_high_temperatures_by_month, average_low_temperatures_by_month, timezone, latitude, longitude")
                 .eq("id", value: cityId.uuidString)
                 .execute()
                 .value
@@ -114,27 +113,4 @@ class CitySearchService: CitySearchServiceType {
         }
     }
     
-    func getPopularCities() async throws -> [CityModel] {
-        do {
-            // Get a mix of popular party cities
-            let popularCityNames = ["Austin", "Las Vegas", "Miami", "Nashville", "Chicago", "New York", "Los Angeles", "Denver", "Phoenix", "Seattle"]
-            var allCities: [CityModel] = []
-            
-            for cityName in popularCityNames.prefix(5) { // Limit to first 5 to avoid too many requests
-                do {
-                    let cities = try await searchCities(query: cityName)
-                    if let firstCity = cities.first {
-                        allCities.append(firstCity)
-                    }
-                } catch {
-                    print("⚠️ Failed to load \(cityName): \(error)")
-                }
-            }
-            
-            return allCities
-        } catch {
-            print("❌ Error loading popular cities: \(error)")
-            throw CitySearchError.networkError(error)
-        }
-    }
 }

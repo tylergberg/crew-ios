@@ -33,7 +33,9 @@ class AppNavigator: ObservableObject {
     private init() {}
     
     func navigateToParty(_ partyId: String, openChat: Bool = false) {
+        print("🎯 AppNavigator: navigateToParty called with partyId: \(partyId), openChat: \(openChat)")
         route = .party(id: partyId, openChat: openChat)
+        print("🎯 AppNavigator: Route set to: \(route)")
     }
     
     func navigateToDashboard() {

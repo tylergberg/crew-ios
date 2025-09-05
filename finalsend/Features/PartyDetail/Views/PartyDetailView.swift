@@ -4,11 +4,14 @@ import Supabase
 struct PartyDetailView: View {
     let partyId: String
     @Environment(\.dismiss) private var dismiss
-    @State private var showSettings = false
     @State private var showEditThemeSheet = false
     @State private var showEditPartyDetailsSheet = false
     @State private var showEditCoverImageSheet = false
+    @State private var showDeletePartyConfirmation = false
     @State private var isLoading = true
+    
+    // Pre-warm menu state to avoid first-touch hang
+    @State private var isMenuPreWarmed = false
 
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var sessionManager: SessionManager
@@ -62,27 +65,33 @@ struct PartyDetailView: View {
                             if partyManager.isOrganizerOrAdmin {
                                 Menu {
                                     Button("Edit Party Details") {
+                                        print("🎯 Settings: Edit Party Details tapped")
                                         showEditPartyDetailsSheet = true
                                     }
                                     
                                     Button("Edit Cover Image") {
+                                        print("🎯 Settings: Edit Cover Image tapped")
                                         showEditCoverImageSheet = true
                                     }
                                     
                                     Button("Edit Theme") {
+                                        print("🎯 Settings: Edit Theme tapped")
                                         showEditThemeSheet = true
                                     }
                                     
                                     Divider()
                                     
                                     Button("Delete Party", role: .destructive) {
-                                        // TODO: Open delete confirmation
-                                        print("Delete party")
+                                        print("🎯 Settings: Delete Party tapped")
+                                        showDeletePartyConfirmation = true
                                     }
                                 } label: {
                                     Image(systemName: "gearshape.circle.fill")
                                         .font(.system(size: 32, weight: .medium))
                                         .foregroundColor(Color(hex: "#353E3E"))
+                                }
+                                .onTapGesture {
+                                    print("🎯 Settings: Menu gear icon tapped")
                                 }
                             }
                         }
@@ -107,10 +116,6 @@ struct PartyDetailView: View {
             }
         }
         .navigationBarHidden(true)
-        .sheet(isPresented: $showSettings) {
-            PartySettingsSheet(onClose: nil)
-                .environmentObject(partyManager)
-        }
         .sheet(isPresented: $showEditThemeSheet) {
             EditThemeSheet(
                 onSaved: {
@@ -132,12 +137,27 @@ struct PartyDetailView: View {
                 }
             )
         }
+        .sheet(isPresented: $showDeletePartyConfirmation) {
+            DeletePartyConfirmationSheet(
+                partyName: partyManager.name,
+                onConfirm: {
+                    Task {
+                        await deleteParty()
+                    }
+                },
+                onDismiss: {
+                    showDeletePartyConfirmation = false
+                }
+            )
+        }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dismissPartyDetail"))) { _ in
             print("🔙 Received dismiss notification - dismissing party detail")
             dismiss()
         }
         .onAppear {
             print("🎯 PartyDetailView appeared - PartyManager isLoaded: \(partyManager.isLoaded)")
+            // Pre-warm menu to avoid first-touch hang
+            preWarmMenu()
             // Wait for PartyManager to be loaded before showing content
             if partyManager.isLoaded {
                 isLoading = false
@@ -152,5 +172,39 @@ struct PartyDetailView: View {
                 isLoading = false
             }
         }
+    }
+    
+    private func deleteParty() async {
+        do {
+            let partyManagementService = PartyManagementService()
+            let success = try await partyManagementService.deleteParty(partyId: partyId)
+            
+            if success {
+                print("✅ Party deleted successfully")
+                // Navigate back to dashboard
+                DispatchQueue.main.async {
+                    AppNavigator.shared.navigateToDashboard()
+                }
+            } else {
+                print("❌ Party deletion failed")
+            }
+        } catch {
+            print("❌ Error deleting party: \(error)")
+        }
+    }
+    
+    private func preWarmMenu() {
+        // Pre-warm the menu by accessing its properties to avoid first-touch compilation
+        guard !isMenuPreWarmed else { return }
+        
+        // Force SwiftUI to compile the menu structure and related properties
+        _ = partyManager.isOrganizerOrAdmin
+        _ = showEditPartyDetailsSheet
+        _ = showEditCoverImageSheet
+        _ = showEditThemeSheet
+        _ = showDeletePartyConfirmation
+        
+        isMenuPreWarmed = true
+        print("🎯 PartyDetailView: Menu pre-warmed successfully")
     }
 }

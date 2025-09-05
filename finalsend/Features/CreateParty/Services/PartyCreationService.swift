@@ -20,6 +20,7 @@ enum PartyCreationError: Error, LocalizedError {
 
 protocol PartyCreationServiceType {
     func createParty(from draft: PartyDraft) async throws -> UUID
+    func fetchParty(partyId: UUID) async throws -> PartyModel
 }
 
 class PartyCreationService: PartyCreationServiceType {
@@ -91,6 +92,42 @@ class PartyCreationService: PartyCreationServiceType {
         
         print("✅ Party created successfully with ID: \(response.id)")
         return response.id
+    }
+    
+    /// Fetches party data by ID
+    func fetchParty(partyId: UUID) async throws -> PartyModel {
+        let response: PartyModel = try await client
+            .from("parties")
+            .select("""
+                id,
+                name,
+                description,
+                start_date,
+                end_date,
+                location,
+                party_type,
+                party_vibe_tags,
+                created_by,
+                city_id,
+                party_size,
+                social_links,
+                cover_image_url,
+                theme_id,
+                cities:city_id (
+                    id,
+                    city,
+                    state_or_province,
+                    country,
+                    timezone
+                )
+            """)
+            .eq("id", value: partyId)
+            .single()
+            .execute()
+            .value
+        
+        print("✅ Party data fetched successfully for ID: \(partyId)")
+        return response
     }
 }
 

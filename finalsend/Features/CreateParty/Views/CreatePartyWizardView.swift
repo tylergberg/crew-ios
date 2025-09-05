@@ -50,7 +50,8 @@ struct CreatePartyWizardView: View {
                                         StepPartyNameView(viewModel: viewModel)
                                     case .dates:
                                         StepPartyDatesView(viewModel: viewModel)
-
+                                    case .location:
+                                        StepPartyLocationView(viewModel: viewModel)
                                     case .vibe:
                                         StepPartyVibeView(viewModel: viewModel)
                                     case .cover:
@@ -81,7 +82,7 @@ struct CreatePartyWizardView: View {
                         primaryTitle: viewModel.step == .review ? (viewModel.isSubmitting ? "Creating..." : "Create") : "Continue",
                         primaryEnabled: (viewModel.step == .review || viewModel.isCurrentStepValid()) && !viewModel.isSubmitting && !viewModel.partyCreatedSuccessfully,
                         showBack: viewModel.step != .type && !viewModel.isSubmitting,
-                        showSkip: viewModel.step == .dates && !viewModel.isSubmitting,
+                        showSkip: (viewModel.step == .dates || viewModel.step == .location || viewModel.step == .vibe || viewModel.step == .cover) && !viewModel.isSubmitting,
                         onBack: { viewModel.back() },
                         onSkip: { viewModel.next() },
                         onPrimary: {
