@@ -221,4 +221,28 @@ class PartyManager: ObservableObject {
     var isOrganizerOrAdmin: Bool {
         return role == "admin" || role == "organizer"
     }
+    
+    /// Clear all party data - useful when navigating between parties
+    func clear() {
+        print("🔍 PartyManager.clear() - Clearing all party data")
+        self.name = ""
+        self.description = "Welcome to the party!"
+        self.startDate = Date()
+        self.endDate = Date()
+        self.location = "Las Vegas"
+        self.timezone = "America/Los_Angeles"
+        self.partyType = "bachelor"
+        self.vibeTags = ["chill", "adventure"]
+        self.partySize = 8
+        self.socialLinks = []
+        self.coverImageURL = nil
+        self.isLoaded = false
+        self.partyId = ""
+        self.role = nil
+        self.cityId = nil
+        self.hasSelectedDates = false
+        self.partyCreatedSuccessfully = false
+        self.themeId = "default"
+        print("✅ PartyManager.clear() - All party data cleared")
+    }
 }

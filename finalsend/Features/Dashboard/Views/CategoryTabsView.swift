@@ -41,16 +41,12 @@ struct CategoryTabsView: View {
         switch tab {
         case .upcoming:
             return "calendar"
-        case .pending:
-            return "clock.badge.questionmark"
+        case .past:
+            return "checkmark.seal.fill"
         case .declined:
             return "xmark.circle.fill"
-        case .inprogress:
-            return "party.popper.fill"
-        case .attended:
-            return "checkmark.seal.fill"
-        case .didntgo:
-            return "figure.walk.departure"
+        case .pending, .inprogress, .attended, .didntgo:
+            return "questionmark.circle" // Default icon for unused tabs
         }
     }
     
@@ -58,16 +54,12 @@ struct CategoryTabsView: View {
         switch tab {
         case .upcoming:
             return "Upcoming"
-        case .pending:
-            return "Pending Invites"
+        case .past:
+            return "Past"
         case .declined:
-            return "Declined Invites"
-        case .inprogress:
-            return "Live Trips"
-        case .attended:
-            return "Attended Trips"
-        case .didntgo:
-            return "Didn't Go"
+            return "Declined"
+        case .pending, .inprogress, .attended, .didntgo:
+            return tab.rawValue // Use the raw value for unused tabs
         }
     }
 }

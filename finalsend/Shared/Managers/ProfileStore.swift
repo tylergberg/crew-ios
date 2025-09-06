@@ -69,7 +69,11 @@ class ProfileStore: ObservableObject {
                 birthday: profile.birthday,
                 linkedin_url: profile.linkedin_url,
                 instagram_handle: profile.instagram_handle,
-                fun_stat: profile.fun_stat
+                fun_stat: profile.fun_stat,
+                onboarding_stage: profile.onboarding_stage,
+                onboarding_completed: profile.onboarding_completed,
+                tos_accepted_at: profile.tos_accepted_at,
+                last_seen_at: profile.last_seen_at
             )
             self.current = profile
         }

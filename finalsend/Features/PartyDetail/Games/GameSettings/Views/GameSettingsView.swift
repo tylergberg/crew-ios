@@ -173,7 +173,7 @@ struct ExternalRecorderAssignmentCard: View {
                         .keyboardType(.phonePad)
                         .textContentType(.telephoneNumber)
                         .onChange(of: phoneNumber) { newValue in
-                            phoneNumber = phoneAuthService.formatPhoneNumber(newValue)
+                            // Simple validation - just clear error message
                             errorMessage = ""
                         }
                 }

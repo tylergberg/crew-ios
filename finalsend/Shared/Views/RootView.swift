@@ -31,23 +31,7 @@ struct RootView: View {
                             }
                         }
                 } else if authManager.isLoggedIn {
-                    if authManager.isProcessingInvite && !authManager.needsNameCollection {
-                        // Show loading state while processing invite (but not for new users who need name collection)
-                        ZStack {
-                            Color(hex: "#9BC8EE")!.ignoresSafeArea()
-                            VStack(spacing: 20) {
-                                ProgressView()
-                                    .scaleEffect(1.5)
-                                    .tint(.white)
-                                Text("Joining the party...")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .onAppear {
-                            print("🔍 RootView: Showing invite processing view")
-                        }
-                    } else if authManager.isInPhoneOnboarding {
+                    if authManager.isInPhoneOnboarding {
                         // Show phone auth view during onboarding (for name collection)
                         PhoneAuthView()
                             .onAppear {

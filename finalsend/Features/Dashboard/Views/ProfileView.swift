@@ -208,4 +208,8 @@ struct ProfileResponse: Decodable {
     let linkedin_url: String?
     let instagram_handle: String?
     let fun_stat: String?
+    let onboarding_stage: String?
+    let onboarding_completed: Bool?
+    let tos_accepted_at: String?
+    let last_seen_at: String?
 }

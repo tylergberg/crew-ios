@@ -181,8 +181,9 @@ struct PartyDetailView: View {
             
             if success {
                 print("✅ Party deleted successfully")
-                // Navigate back to dashboard
+                // Post notification to refresh dashboard data
                 DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .refreshPartyData, object: nil)
                     AppNavigator.shared.navigateToDashboard()
                 }
             } else {

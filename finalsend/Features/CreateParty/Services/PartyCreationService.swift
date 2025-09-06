@@ -109,7 +109,6 @@ class PartyCreationService: PartyCreationServiceType {
                 party_vibe_tags,
                 created_by,
                 city_id,
-                party_size,
                 social_links,
                 cover_image_url,
                 theme_id,
