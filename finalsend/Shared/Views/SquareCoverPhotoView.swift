@@ -60,10 +60,19 @@ struct SquareCoverPhotoView: View {
             // Increment version tick when party data is refreshed to force image reload
             versionTick &+= 1
         }
+        .onChange(of: imageURL) { newURL in
+            // Clear cache when image URL changes to nil or different value
+            if newURL != imageURL {
+                versionTick &+= 1
+            }
+        }
     }
     
     private var versionedImageURL: String? {
-        guard let imageURL = imageURL, !imageURL.isEmpty else { return imageURL }
+        guard let imageURL = imageURL, !imageURL.isEmpty else { 
+            // Return nil with version tick to force cache clear when URL is nil
+            return versionTick > 0 ? "nil?v=\(versionTick)" : nil
+        }
         
         // Add version parameter to force cache refresh
         let separator = imageURL.contains("?") ? "&" : "?"

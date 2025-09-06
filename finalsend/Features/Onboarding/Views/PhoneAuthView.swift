@@ -47,18 +47,9 @@ struct PhoneAuthView: View {
                                 .keyboardType(.phonePad)
                                 .textContentType(.telephoneNumber)
                                 .background(Color.clear)
-                                .ignoresSafeArea(.keyboard, edges: .bottom)
                                 .focused($isPhoneFieldFocused)
                                 .onChange(of: phoneNumber) { newValue in
-                                    // Only format if the change wasn't triggered by our own formatting
-                                    let digitsOnly = newValue.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
-                                    if digitsOnly.count <= 10 {
-                                        // Format phone number as user types
-                                        let formatted = phoneAuthService.formatPhoneNumber(newValue)
-                                        if formatted != newValue {
-                                            phoneNumber = formatted
-                                        }
-                                    }
+                                    // Simple validation - just clear error message
                                     errorMessage = ""
                                 }
                         }

@@ -578,7 +578,11 @@ class EditableProfileViewModel: ObservableObject {
             birthday: "January 1, 1990",
             linkedin_url: "https://linkedin.com/in/test",
             instagram_handle: "@testuser",
-            fun_stat: "I love coding!"
+            fun_stat: "I love coding!",
+            onboarding_stage: "done",
+            onboarding_completed: true,
+            tos_accepted_at: "2025-01-01T00:00:00Z",
+            last_seen_at: "2025-01-01T00:00:00Z"
         ),
         onProfileUpdated: {}
     )

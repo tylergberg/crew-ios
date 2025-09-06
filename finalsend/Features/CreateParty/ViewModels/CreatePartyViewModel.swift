@@ -219,6 +219,7 @@ class CreatePartyViewModel: ObservableObject {
             
             // 6. Mark as successfully created and show success toast
             partyCreatedSuccessfully = true
+            partyManager.partyCreatedSuccessfully = true
             showSuccessToast = true
             print("🎯 Party created successfully, setting showSuccessToast = true")
             

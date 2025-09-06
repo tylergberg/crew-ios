@@ -8,6 +8,7 @@ extension Notification.Name {
 
 enum PartyTab: String, CaseIterable {
     case upcoming = "Upcoming"
+    case past = "Past"
     case pending = "Pending Invites"
     case declined = "Declined Invites"
     case inprogress = "Live Trips"
@@ -129,11 +130,19 @@ struct DashboardView: View {
                     let currentUserRole = party.attendees?.first(where: { $0.isCurrentUser })?.role.rawValue
                     print("✅ DashboardView: Current user role: \(currentUserRole ?? "nil")")
                     
+                    // Clear PartyManager before loading new party data
+                    partyManager.clear()
                     partyManager.load(from: PartyModel(fromParty: party), role: currentUserRole)
                     print("✅ DashboardView: PartyManager loaded - name: \(partyManager.name), isLoaded: \(partyManager.isLoaded), themeId: \(partyManager.themeId), role: \(partyManager.role ?? "nil")")
                 } else {
-                    print("❌ DashboardView: Party not found for id: \(id)")
-                    print("❌ DashboardView: Available parties: \(parties.map { $0.id.uuidString })")
+                    // Party not found in parties list - this could be a newly created party
+                    // Check if PartyManager already has the party data loaded (from creation)
+                    if partyManager.partyId == id && partyManager.isLoaded {
+                        print("✅ DashboardView: Party \(id) not in parties list but PartyManager has it loaded (newly created), proceeding with navigation")
+                    } else {
+                        print("❌ DashboardView: Party not found for id: \(id)")
+                        print("❌ DashboardView: Available parties: \(parties.map { $0.id.uuidString })")
+                    }
                 }
             case .dashboard:
                 // Dismiss the party detail view by setting deeplinkPartyId to nil
@@ -522,6 +531,8 @@ struct DashboardView: View {
             switch selectedTab {
             case .upcoming:
                 return isFuture && !(currentUserHasDeclined || currentUserHasPending)
+            case .past:
+                return isPast && !(currentUserHasDeclined || currentUserHasPending)
             case .pending:
                 return isFuture && currentUserHasPending
             case .declined:
@@ -544,7 +555,7 @@ struct DashboardView: View {
             case .upcoming, .pending, .declined:
                 // Start date ascending; undated at end for Upcoming case
                 return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
-            case .inprogress, .attended, .didntgo:
+            case .past, .inprogress, .attended, .didntgo:
                 // End date descending (most recent first)
                 return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
             }
@@ -619,6 +630,7 @@ struct Party: Identifiable, Decodable {
     let themeId: String?
     let partyType: String?
     let vibeTags: [String]?
+    let attendeeCount: Int? // Add attendee count from database
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -646,10 +658,11 @@ struct Party: Identifiable, Decodable {
         self.partyType = try container.decodeIfPresent(String.self, forKey: .partyType)
         self.vibeTags = try container.decodeIfPresent([String].self, forKey: .vibeTags)
         self.attendees = nil // Will be set manually after fetching
+        self.attendeeCount = nil // Will be set manually after fetching
     }
     
     // Custom initializer for creating instances with attendees
-    init(id: UUID, name: String, description: String? = nil, startDate: String?, endDate: String?, city: PartyCity?, coverImageURL: String?, attendees: [DashboardAttendee]?, themeId: String? = "default", partyType: String? = nil, vibeTags: [String]? = nil) {
+    init(id: UUID, name: String, description: String? = nil, startDate: String?, endDate: String?, city: PartyCity?, coverImageURL: String?, attendees: [DashboardAttendee]?, themeId: String? = "default", partyType: String? = nil, vibeTags: [String]? = nil, attendeeCount: Int? = nil) {
         self.id = id
         self.name = name
         self.description = description
@@ -661,6 +674,7 @@ struct Party: Identifiable, Decodable {
         self.themeId = themeId
         self.partyType = partyType
         self.vibeTags = vibeTags
+        self.attendeeCount = attendeeCount
     }
 }
 

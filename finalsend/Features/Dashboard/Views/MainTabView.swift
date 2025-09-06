@@ -6,14 +6,10 @@ struct MainTabView: View {
     @State private var showingProfile = false
     @State private var shouldShowUI = false
     @State private var partiesLoaded = false
-    @State private var hasCheckedForInProgressOnLaunch = false
     @State private var partyCounts: [PartyTab: Int] = [
         .upcoming: 0,
-        .pending: 0,
-        .declined: 0,
-        .inprogress: 0,
-        .attended: 0,
-        .didntgo: 0
+        .past: 0,
+        .declined: 0
     ]
     @EnvironmentObject var partyManager: PartyManager
     @EnvironmentObject var appNavigator: AppNavigator
@@ -23,6 +19,9 @@ struct MainTabView: View {
     
     // Pre-calculated menu items to avoid computation on first touch
     @State private var cachedMenuItems: [PartyTab: String] = [:]
+    
+    // Loading timeout to ensure UI shows even if something goes wrong
+    @State private var loadingTimeout: Timer?
 
     
     var body: some View {
@@ -40,17 +39,18 @@ struct MainTabView: View {
                     PartiesTabView(selectedTab: $selectedTab)
                         .environmentObject(partyManager)
                         .environmentObject(appNavigator)
-                        .opacity((shouldShowUI && partiesLoaded) ? 1 : 0)
+                        .opacity((shouldShowUI && partiesLoaded && !authManager.isProcessingInvite) ? 1 : 0)
                 }
                 
-                if !shouldShowUI || !partiesLoaded {
-                    // Show loading overlay while determining the correct tab and loading parties
-                    CustomLoadingView()
+                if !shouldShowUI || !partiesLoaded || authManager.isProcessingInvite {
+                    // Show loading screen with sparkle icon while processing data or invite
+                    SparkleLoadingView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.neutralBackground)
                         .transition(.opacity.combined(with: .scale))
                         .animation(.easeInOut(duration: 0.3), value: shouldShowUI)
                         .animation(.easeInOut(duration: 0.3), value: partiesLoaded)
+                        .animation(.easeInOut(duration: 0.3), value: authManager.isProcessingInvite)
                 }
                 
                 // Hidden NavigationLink for profile
@@ -83,22 +83,35 @@ struct MainTabView: View {
         .fullScreenCover(isPresented: $authManager.needsNameCollection) {
             NameCollectionView(
                 phoneNumber: authManager.pendingPhoneNumber,
-                fromInvite: false,
-                invitePartyId: nil,
-                invitePartyName: nil
+                fromInvite: authManager.pendingPartyId != nil,
+                invitePartyId: authManager.pendingPartyId,
+                invitePartyName: nil // We don't store party name in AuthManager, but that's okay
             )
         }
         .onAppear {
             print("🔍 MainTabView: onAppear called")
-            // Pre-calculate menu items immediately
+            // Pre-calculate menu items immediately (without counts initially)
             updateCachedMenuItems()
+            
+            // Set a timeout to show UI after 2 seconds even if loading isn't complete
+            loadingTimeout = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+                DispatchQueue.main.async {
+                    if !self.shouldShowUI && !authManager.isInPhoneOnboarding {
+                        print("🔍 MainTabView: Loading timeout reached, showing UI")
+                        self.shouldShowUI = true
+                        self.partiesLoaded = true
+                    } else if authManager.isInPhoneOnboarding {
+                        print("🔍 MainTabView: Loading timeout reached but user is in phone onboarding - not showing UI")
+                    }
+                }
+            }
+            
             Task {
                 // Skip profile loading if user needs name collection (new user)
                 if !authManager.needsNameCollection {
                     await ProfileStore.shared.loadCurrentUserProfile()
                     currentUserId = ProfileStore.shared.current?.id
-                    // Show UI for existing users
-                    shouldShowUI = true
+                    // Don't show UI immediately - wait for parties to load
                 } else {
                     print("🔍 Skipping profile load - user needs name collection")
                     // Show UI immediately for new users so they can see the name collection screen
@@ -106,6 +119,10 @@ struct MainTabView: View {
                 }
                 await loadUnreadTaskCount()
             }
+        }
+        .onDisappear {
+            loadingTimeout?.invalidate()
+            loadingTimeout = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshTaskCount)) { _ in
             // Refresh task count when notification is received
@@ -115,19 +132,21 @@ struct MainTabView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("partiesLoaded"))) { _ in
             print("🔍 MainTabView: Received partiesLoaded notification")
-            // Mark parties as loaded and show UI
-            partiesLoaded = true
-            // Check for in-progress parties when parties are loaded
-            checkForInProgressParties()
-            // Also calculate party counts immediately
-            calculatePartyCounts()
+            // Mark parties as loaded and show UI immediately - counts are not required
+            DispatchQueue.main.async {
+                self.partiesLoaded = true
+                self.shouldShowUI = true
+                print("🔍 MainTabView: partiesLoaded set to true, shouldShowUI set to true (counts not required)")
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("partyCountsUpdated"))) { notification in
             if let counts = notification.userInfo?["counts"] as? [PartyTab: Int] {
-                partyCounts = counts
-                print("🔍 MainTabView: Updated party counts - \(counts)")
-                // Pre-calculate menu items to avoid computation on first touch
-                updateCachedMenuItems()
+                DispatchQueue.main.async {
+                    self.partyCounts = counts
+                    print("🔍 MainTabView: Updated party counts - \(counts)")
+                    // Pre-calculate menu items to avoid computation on first touch
+                    self.updateCachedMenuItems()
+                }
             }
         }
         .onChange(of: selectedTab) { _ in
@@ -137,13 +156,16 @@ struct MainTabView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dismissPartyDetail"))) { _ in
             // When returning from a party, show UI immediately and mark parties as loaded
-            shouldShowUI = true
-            partiesLoaded = true
+            DispatchQueue.main.async {
+                self.shouldShowUI = true
+                self.partiesLoaded = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("nameCollectionCompleted"))) { _ in
             // When name collection is completed, show UI and load profile
             print("🔍 MainTabView: Name collection completed, showing UI")
             shouldShowUI = true
+            partiesLoaded = true // Mark parties as loaded since user can now see the dashboard
             Task {
                 await ProfileStore.shared.loadCurrentUserProfile()
                 currentUserId = ProfileStore.shared.current?.id
@@ -212,7 +234,7 @@ struct MainTabView: View {
                         selectedTab = tab
                     }) {
                         HStack {
-                            Text(cachedMenuItems[tab] ?? "\(tab.rawValue) (0)")
+                            Text(cachedMenuItems[tab] ?? "\(tab.rawValue)")
                             if selectedTab == tab {
                                 Image(systemName: "checkmark")
                             }
@@ -237,7 +259,7 @@ struct MainTabView: View {
     }
     
     private var availableTabs: [PartyTab] {
-        return [.upcoming, .pending, .declined, .inprogress, .attended, .didntgo]
+        return [.upcoming, .past, .declined]
     }
     
     private func loadUnreadTaskCount() async {
@@ -250,27 +272,16 @@ struct MainTabView: View {
         }
     }
     
-    private func checkForInProgressParties() {
-        print("🔍 MainTabView: checkForInProgressParties called")
-        // This will be called when parties are loaded
-        // For now, we'll just show the UI and let PartiesTabView handle the tab switching
-        shouldShowUI = true
-        print("🔍 MainTabView: shouldShowUI set to true")
-    }
-    
-    private func calculatePartyCounts() {
-        print("🔍 MainTabView: calculatePartyCounts called")
-        // Don't override the counts - let them come from PartiesTabView via notification
-        // This function is called when parties are loaded, but the actual counts
-        // should be sent by PartiesTabView, not calculated here
-        print("🔍 MainTabView: Waiting for party counts from PartiesTabView")
-    }
     
     private func updateCachedMenuItems() {
         // Pre-calculate menu item labels to avoid computation on first touch
         for tab in availableTabs {
-            let count = partyCounts[tab] ?? 0
-            cachedMenuItems[tab] = "\(tab.rawValue) (\(count))"
+            if let count = partyCounts[tab] {
+                cachedMenuItems[tab] = "\(tab.rawValue) (\(count))"
+            } else {
+                // Show tab name without count if counts aren't loaded yet
+                cachedMenuItems[tab] = "\(tab.rawValue)"
+            }
         }
     }
 }

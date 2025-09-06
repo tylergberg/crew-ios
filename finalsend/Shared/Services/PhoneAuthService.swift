@@ -243,7 +243,7 @@ class PhoneAuthService: ObservableObject {
             // Based on Lovable's guidance, the Swift SDK should have equivalent methods
             
             // Option 1: Try with UserAttributes struct
-            let result = try await client.auth.update(user: UserAttributes(phone: e164PhoneNumber))
+            _ = try await client.auth.update(user: UserAttributes(phone: e164PhoneNumber))
             
             // The update method returns a User object directly, not an object with error property
             // If it throws an error, it will be caught in the catch block below
@@ -377,7 +377,7 @@ class PhoneAuthService: ObservableObject {
     /// Check if a user profile exists for the given user ID
     func checkIfUserProfileExists(userId: String) async -> Bool {
         do {
-            let response = try await client
+            _ = try await client
                 .from("profiles")
                 .select("id")
                 .eq("id", value: userId)
@@ -398,7 +398,7 @@ class PhoneAuthService: ObservableObject {
         do {
             let response = try await client
                 .from("profiles")
-                .select("id, full_name, avatar_url, phone, email, role")
+                .select("id, full_name, avatar_url, phone, email, role, onboarding_stage, onboarding_completed, tos_accepted_at, last_seen_at")
                 .eq("id", value: userId)
                 .single()
                 .execute()
@@ -422,7 +422,11 @@ class PhoneAuthService: ObservableObject {
                     birthday: nil,
                     linkedin_url: nil,
                     instagram_handle: nil,
-                    fun_stat: nil
+                    fun_stat: nil,
+                    onboarding_stage: jsonData["onboarding_stage"] as? String,
+                    onboarding_completed: jsonData["onboarding_completed"] as? Bool,
+                    tos_accepted_at: jsonData["tos_accepted_at"] as? String,
+                    last_seen_at: jsonData["last_seen_at"] as? String
                 )
             }
             

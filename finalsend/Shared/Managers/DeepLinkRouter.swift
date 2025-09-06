@@ -120,12 +120,30 @@ enum DeepLinkRouter {
                     if let partyId = await AuthManager.shared.acceptPendingInviteIfAny() {
                         print("✅ ULINK invite accepted successfully, party_id: \(partyId)")
                         
+                        // Set processing state to show loading screen
+                        AuthManager.shared.isProcessingInvite = true
+                        
                         // Post notification to refresh parties list in dashboard
                         DispatchQueue.main.async {
                             NotificationCenter.default.post(name: .refreshPartyData, object: nil)
                         }
                         
+                        // Wait for parties to refresh, then navigate
+                        print("🔍 Waiting for parties to refresh before navigation...")
+                        await waitForPartiesToRefresh()
+                        print("🔍 Parties refreshed, now navigating to party: \(partyId)")
+                        
+                        // Add a small delay to ensure parties are fully loaded in memory
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                        print("🔍 Delay completed, now navigating to party: \(partyId)")
+                        
+                        // Navigate to the party
                         AppNavigator.shared.navigateToParty(partyId)
+                        
+                        // Clear processing state after a short delay to ensure navigation completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            AuthManager.shared.isProcessingInvite = false
+                        }
                     } else {
                         print("❌ Failed to accept ULINK invite")
                         AppNavigator.shared.showError(message: "Failed to accept invite. Please try again.")
@@ -256,6 +274,42 @@ enum DeepLinkRouter {
             } else {
                 print("🔐 User not authenticated, cannot navigate to party")
                 AppNavigator.shared.navigateToLogin()
+            }
+        }
+    }
+    
+    /// Wait for parties to refresh after invite acceptance
+    private static func waitForPartiesToRefresh() async {
+        // Wait for the partiesLoaded notification to ensure parties are refreshed
+        await withCheckedContinuation { continuation in
+            var observer: NSObjectProtocol?
+            var hasResumed = false
+            
+            observer = NotificationCenter.default.addObserver(
+                forName: Notification.Name("partiesLoaded"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                if let obs = observer {
+                    NotificationCenter.default.removeObserver(obs)
+                }
+                if !hasResumed {
+                    hasResumed = true
+                    print("🔍 waitForPartiesToRefresh: Received partiesLoaded notification")
+                    continuation.resume()
+                }
+            }
+            
+            // Fallback timeout after 5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                if let obs = observer {
+                    NotificationCenter.default.removeObserver(obs)
+                }
+                if !hasResumed {
+                    hasResumed = true
+                    print("🔍 waitForPartiesToRefresh: Timeout reached, proceeding anyway")
+                    continuation.resume()
+                }
             }
         }
     }

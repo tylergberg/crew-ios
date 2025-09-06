@@ -17,7 +17,6 @@ struct OTPVerificationView: View {
     @State private var errorMessage = ""
     @State private var timeRemaining = 60
     @State private var canResend = false
-    @State private var showNameCollection = false
     @FocusState private var isOTPFieldFocused: Bool
     
 
@@ -52,7 +51,6 @@ struct OTPVerificationView: View {
                             .textContentType(.none) // Disable all autofill to remove the bar completely
                             .multilineTextAlignment(.center)
                             .background(Color.clear)
-                            .ignoresSafeArea(.keyboard, edges: .bottom)
                             .focused($isOTPFieldFocused)
                             .onChange(of: otpCode) { newValue in
                                 // Limit to 6 digits and only allow numbers
@@ -134,7 +132,6 @@ struct OTPVerificationView: View {
             }
         }
         .navigationBarBackButtonHidden(false)
-
         .onAppear {
             startTimer()
             // Auto-focus the OTP field
@@ -168,11 +165,10 @@ struct OTPVerificationView: View {
                 // Persist session
                 try await authManager.persistCurrentSession()
                 
-                // Check if user profile exists and has a proper name
+                // Check user profile and onboarding status
                 let userProfile = await phoneAuthService.getUserProfile(userId: session.user.id.uuidString)
-                let hasProperName = userProfile?.full_name != nil && userProfile?.full_name != "New User"
                 print("🔍 User profile exists: \(userProfile != nil)")
-                print("🔍 User has proper name: \(hasProperName)")
+                print("🔍 User onboarding_completed: \(userProfile?.onboarding_completed ?? false)")
                 print("🔍 User name: \(userProfile?.full_name ?? "nil")")
                 
                 // Update the phone number in the profile table
@@ -183,14 +179,22 @@ struct OTPVerificationView: View {
                     print("🔍 Inside MainActor block, setting isLoading = false")
                     isLoading = false
                     
-                    if !hasProperName {
-                        // For new users or users with default names, set flag to show name collection
+                    // Check onboarding state from database
+                    if userProfile?.onboarding_completed == true {
+                        // Existing user - go straight to main app
+                        print("✅ OTP verification completed, existing user with onboarding_completed=true - navigating to main app")
+                        // Let AuthManager handle navigation
+                    } else {
+                        // New user - show name collection
+                        print("✅ OTP verification completed, new user with onboarding_completed=false - showing name collection")
+                        authManager.isInPhoneOnboarding = true
                         authManager.needsNameCollection = true
                         authManager.pendingPhoneNumber = phoneNumber
-                        print("✅ OTP verification completed, setting needsNameCollection flag for user without proper name")
-                    } else {
-                        // For existing users with proper names, let AuthManager session listener handle navigation
-                        print("✅ OTP verification completed, existing user with proper name - waiting for session listener to handle navigation")
+                        
+                        // Store invite data for later use in NameCollectionView
+                        if let partyId = invitePartyId {
+                            authManager.storePendingParty(partyId: partyId)
+                        }
                     }
                 }
                 

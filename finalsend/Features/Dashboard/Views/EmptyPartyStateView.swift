@@ -8,16 +8,12 @@ struct EmptyPartyStateView: View {
         switch tab {
         case .upcoming:
             return ("No upcoming parties", "Time to plan the perfect party!")
-        case .inprogress:
-            return ("Party loading...", "Your trip will appear here once the party officially kicks off.")
-        case .attended:
+        case .past:
             return ("Memories live here", "Once the party's over, your recaps will show up here.")
-        case .didntgo:
-            return ("No past declined invites", "Past invites you declined or didn't attend will show here.")
         case .declined:
             return ("No declined parties", "You haven't declined any party invitations yet.")
-        case .pending:
-            return ("No pending invitations", "You don't have any pending party invitations.")
+        case .pending, .inprogress, .attended, .didntgo:
+            return ("No parties", "No parties found in this category.")
         }
     }
     
@@ -25,16 +21,12 @@ struct EmptyPartyStateView: View {
         switch tab {
         case .upcoming:
             return "partyplans"
-        case .inprogress:
-            return "partytime"
-        case .attended:
-            return "partypast"
-        case .didntgo:
+        case .past:
             return "partypast"
         case .declined:
-            return "partypast" // Use same illustration as past for declined
-        case .pending:
-            return "partypast" // Use same illustration as past for pending
+            return "partypast"
+        case .pending, .inprogress, .attended, .didntgo:
+            return "partypast" // Default illustration for unused tabs
         }
     }
     

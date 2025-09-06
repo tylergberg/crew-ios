@@ -15,11 +15,8 @@ struct PartiesTabView: View {
     @State private var scrollToTop = false
     @State private var partyCounts: [PartyTab: Int] = [
         .upcoming: 0,
-        .pending: 0,
-        .declined: 0,
-        .inprogress: 0,
-        .attended: 0,
-        .didntgo: 0
+        .past: 0,
+        .declined: 0
     ]
     
     var body: some View {
@@ -63,22 +60,39 @@ struct PartiesTabView: View {
         .onReceive(appNavigator.$route) { route in
             switch route {
             case .party(let id, let openChat):
-                deeplinkPartyId = id
-                deeplinkOpenChat = openChat
-                // Load party data into PartyManager immediately when navigation is triggered
+                // Security check: Only proceed if the party is in the user's authorized parties list
                 if let party = parties.first(where: { $0.id.uuidString == id }) {
-                    print("✅ PartiesTabView: Loading party data for \(id) into PartyManager")
-                    print("✅ PartiesTabView: Party themeId: \(party.themeId ?? "nil")")
-                    
-                    // Find the current user's role in this party
+                    // Additional security check: Verify user is actually a member of this party
                     let currentUserRole = party.attendees?.first(where: { $0.isCurrentUser })?.role.rawValue
-                    print("✅ PartiesTabView: Current user role: \(currentUserRole ?? "nil")")
                     
-                    partyManager.load(from: PartyModel(fromParty: party), role: currentUserRole)
-                    print("✅ PartiesTabView: PartyManager loaded - name: \(partyManager.name), isLoaded: \(partyManager.isLoaded), themeId: \(partyManager.themeId), role: \(partyManager.role ?? "nil")")
+                    if currentUserRole != nil {
+                        print("✅ PartiesTabView: User authorized for party \(id), loading into PartyManager")
+                        print("✅ PartiesTabView: Party themeId: \(party.themeId ?? "nil")")
+                        print("✅ PartiesTabView: Current user role: \(currentUserRole ?? "nil")")
+                        
+                        deeplinkPartyId = id
+                        deeplinkOpenChat = openChat
+                        
+                        // Clear PartyManager before loading new party data
+                        partyManager.clear()
+                        partyManager.load(from: PartyModel(fromParty: party), role: currentUserRole)
+                        print("✅ PartiesTabView: PartyManager loaded - name: \(partyManager.name), isLoaded: \(partyManager.isLoaded), themeId: \(partyManager.themeId), role: \(partyManager.role ?? "nil")")
+                    } else {
+                        print("❌ PartiesTabView: User not authorized for party \(id)")
+                    }
                 } else {
-                    print("❌ PartiesTabView: Party not found for id: \(id)")
-                    print("❌ PartiesTabView: Available parties: \(parties.map { $0.id.uuidString })")
+                    // Party not found in parties list - this could be a newly created party
+                    // Check if PartyManager already has the party data loaded (from creation)
+                    if partyManager.partyId == id && partyManager.isLoaded {
+                        print("✅ PartiesTabView: Party \(id) not in parties list but PartyManager has it loaded (newly created), proceeding with navigation")
+                        deeplinkPartyId = id
+                        deeplinkOpenChat = openChat
+                    } else {
+                        print("❌ PartiesTabView: SECURITY ALERT - User not authorized for party \(id)")
+                        print("❌ PartiesTabView: Available parties: \(parties.map { $0.id.uuidString })")
+                        // Navigate back to dashboard for security
+                        appNavigator.navigateToDashboard()
+                    }
                 }
             case .dashboard:
                 // Dismiss the party detail view by setting deeplinkPartyId to nil
@@ -104,22 +118,36 @@ struct PartiesTabView: View {
             deeplinkPartyId = nil
             deeplinkOpenChat = false
             
+            // Clear caches before refreshing - do this asynchronously
+            DispatchQueue.main.async {
+                cachedFilteredParties = []
+                lastSelectedTab = nil
+                cachedPartyCounts = nil
+            }
+            
             // Refresh parties list when returning to dashboard
             fetchParties()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("requestPartyCountsUpdate"))) { _ in
             // Send party counts when requested
             print("🔍 PartiesTabView: Received requestPartyCountsUpdate notification")
-            sendPartyCounts()
+            DispatchQueue.main.async {
+                self.sendPartyCounts()
+            }
         }
         .onChange(of: selectedTab) { _ in
             // Reset scroll position when tab changes
             scrollToTop = true
+            // Clear cache when tab changes to force recalculation - do this asynchronously
+            DispatchQueue.main.async {
+                cachedFilteredParties = []
+                lastSelectedTab = nil
+            }
         }
     }
     
     private var availableTabs: [PartyTab] {
-        return [.upcoming, .pending, .declined, .inprogress, .attended, .didntgo]
+        return [.upcoming, .past, .declined]
     }
     
 
@@ -147,7 +175,7 @@ struct PartiesTabView: View {
                         } else {
                             LazyVStack(spacing: Spacing.cardGap) {
                                 // Show real party cards
-                                ForEach(filteredParties(), id: \.id) { party in
+                                ForEach(filteredParties, id: \.id) { party in
                                     Button(action: {
                                         // Use AppNavigator for consistent navigation
                                         appNavigator.navigateToParty(party.id.uuidString, openChat: false)
@@ -196,7 +224,12 @@ struct PartiesTabView: View {
         errorMessage = nil
         
         Task {
-            do {
+            await self.fetchPartiesAsync()
+        }
+    }
+    
+    private func fetchPartiesAsync() async {
+        do {
                 let client = SupabaseManager.shared.client
                 
                 // Get current user
@@ -231,52 +264,77 @@ struct PartiesTabView: View {
                     .execute()
                     .value
 
-                // Step 3: Fetch all attendee data for all parties in a single query
-                let allAttendees: [DashboardAttendeeWithPartyId] = try await client
-                    .from("party_members")
-                    .select("""
-                        id,
-                        party_id,
-                        user_id,
-                        role,
-                        special_role,
-                        status,
-                        profiles!party_members_user_id_fkey(
-                            full_name,
-                            avatar_url
-                        )
-                    """)
-                    .in("party_id", values: partyIds.map { $0.uuidString })
-                    .execute()
-                    .value
+                // Step 3: Fetch attendee counts and current user status for dashboard efficiency
+                print("🔍 [fetchParties] Fetching attendee counts for \(partyIds.count) parties")
                 
-                
-                // Group attendees by party_id
-                var attendeesByPartyId: [UUID: [DashboardAttendee]] = [:]
-                for attendee in allAttendees {
-                    let isCurrentUser = attendee.userId.lowercased() == user.id.uuidString.lowercased()
-                                            let dashboardAttendee = DashboardAttendee(
-                            id: attendee.id,
-                            userId: attendee.userId,
-                            fullName: attendee.fullName,
-                            avatarUrl: attendee.avatarUrl,
-                            role: attendee.role,
-                            specialRole: attendee.specialRole,
-                            status: attendee.status,
-                            isCurrentUser: isCurrentUser
-                        )
-                    
-                    if attendeesByPartyId[attendee.partyId] == nil {
-                        attendeesByPartyId[attendee.partyId] = []
-                    }
-                    attendeesByPartyId[attendee.partyId]?.append(dashboardAttendee)
-                    
+                // Get attendee counts per party
+                struct AttendeeCount: Decodable {
+                    let party_id: UUID
+                    let attendee_count: Int
+                    let current_user_status: String?
+                    let current_user_role: String?
                 }
                 
-                // Create parties with their attendees
+                // Try optimized RPC call first, fallback to basic query if it fails
+                let attendeeCounts: [AttendeeCount]
+                do {
+                    struct RPCParams: Encodable {
+                        let party_ids: [String]
+                        let current_user_id: String
+                    }
+                    
+                    let params = RPCParams(
+                        party_ids: partyIds.map { $0.uuidString },
+                        current_user_id: user.id.uuidString
+                    )
+                    
+                    attendeeCounts = try await client
+                        .rpc("get_party_attendee_counts", params: params)
+                        .execute()
+                        .value
+                    print("🔍 [fetchParties] Fetched attendee counts for \(attendeeCounts.count) parties (optimized)")
+                } catch {
+                    print("⚠️ [fetchParties] RPC call failed, using fallback: \(error)")
+                    // Fallback: create empty counts (dashboard will still work, just without attendee counts)
+                    attendeeCounts = partyIds.map { partyId in
+                        AttendeeCount(party_id: partyId, attendee_count: 0, current_user_status: nil, current_user_role: nil)
+                    }
+                    print("🔍 [fetchParties] Using fallback - created empty counts for \(attendeeCounts.count) parties")
+                }
+                
+                // Create attendee count lookup
+                var attendeeCountsByPartyId: [UUID: (count: Int, currentUserStatus: String?, currentUserRole: String?)] = [:]
+                for countData in attendeeCounts {
+                    attendeeCountsByPartyId[countData.party_id] = (
+                        count: countData.attendee_count,
+                        currentUserStatus: countData.current_user_status,
+                        currentUserRole: countData.current_user_role
+                    )
+                }
+                
+                // Create parties with attendee counts and current user status (dashboard optimization)
                 var partiesWithAttendees: [Party] = []
                 for party in fetchedParties {
-                    let attendees = attendeesByPartyId[party.id] ?? []
+                    let countData = attendeeCountsByPartyId[party.id]
+                    let attendeeCount = countData?.count ?? 0
+                    let currentUserStatus = countData?.currentUserStatus
+                    let currentUserRole = countData?.currentUserRole
+                    
+                    // Create a minimal attendee entry for the current user to enable proper filtering
+                    var attendees: [DashboardAttendee] = []
+                    if let status = currentUserStatus {
+                        let currentUserAttendee = DashboardAttendee(
+                            id: UUID(), // Temporary ID for dashboard
+                            userId: user.id.uuidString,
+                            fullName: "Current User", // Placeholder - not shown in UI
+                            avatarUrl: nil,
+                            role: currentUserRole ?? "attendee", // Use actual role from RPC, fallback to attendee
+                            specialRole: nil,
+                            status: status,
+                            isCurrentUser: true
+                        )
+                        attendees.append(currentUserAttendee)
+                    }
                     
                     let partyWithAttendees = Party(
                         id: party.id,
@@ -286,26 +344,62 @@ struct PartiesTabView: View {
                         endDate: party.endDate,
                         city: party.city,
                         coverImageURL: party.coverImageURL,
-                        attendees: attendees,
+                        attendees: attendees, // Include current user for filtering
                         themeId: party.themeId,
                         partyType: party.partyType,
-                        vibeTags: party.vibeTags
+                        vibeTags: party.vibeTags,
+                        attendeeCount: attendeeCount // Add the actual count from database
                     )
                     partiesWithAttendees.append(partyWithAttendees)
                 }
 
                 await MainActor.run {
-                    print("🔍 PartiesTabView: Parties loaded successfully")
+                    print("🔍 PartiesTabView: Parties loaded successfully (optimized - attendee counts only)")
                     self.parties = partiesWithAttendees
                     self.isLoading = false
                     
-                    // Check for in-progress parties and set default tab
-                    self.checkForInProgressParties()
+                    // Clear caches when parties are updated
+                    self.cachedFilteredParties = []
+                    self.lastSelectedTab = nil
+                    self.cachedPartyCounts = nil
                     
-                    // Calculate and send party counts
+                    // Perform security check for pending navigation if parties were empty before
+                    if let pendingPartyId = self.deeplinkPartyId {
+                        print("🔍 PartiesTabView: Performing delayed security check for party \(pendingPartyId)")
+                        if let party = self.parties.first(where: { $0.id.uuidString == pendingPartyId }) {
+                            let currentUserRole = party.attendees?.first(where: { $0.isCurrentUser })?.role.rawValue
+                            
+                            if currentUserRole != nil {
+                                print("✅ PartiesTabView: Delayed security check passed for party \(pendingPartyId)")
+                                print("✅ PartiesTabView: Party themeId: \(party.themeId ?? "nil")")
+                                print("✅ PartiesTabView: Current user role: \(currentUserRole ?? "nil")")
+                                
+                                // Clear PartyManager before loading new party data
+                                self.partyManager.clear()
+                                self.partyManager.load(from: PartyModel(fromParty: party), role: currentUserRole)
+                                print("✅ PartiesTabView: PartyManager loaded - name: \(self.partyManager.name), isLoaded: \(self.partyManager.isLoaded), themeId: \(self.partyManager.themeId), role: \(self.partyManager.role ?? "nil")")
+                            } else {
+                                print("❌ PartiesTabView: Delayed security check failed - User not authorized for party \(pendingPartyId)")
+                                self.deeplinkPartyId = nil
+                                self.deeplinkOpenChat = false
+                                self.appNavigator.navigateToDashboard()
+                            }
+                        } else {
+                            print("❌ PartiesTabView: Delayed security check failed - Party \(pendingPartyId) not found in authorized parties")
+                            self.deeplinkPartyId = nil
+                            self.deeplinkOpenChat = false
+                            self.appNavigator.navigateToDashboard()
+                        }
+                    }
+                }
+                
+                // Calculate and send party counts after state update (asynchronously)
+                DispatchQueue.main.async {
                     self.sendPartyCounts()
-                    
-                    // Notify MainTabView that parties are loaded
+                }
+                
+                // Notify MainTabView that parties are loaded (minimal delay to ensure state is settled)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     print("🔍 PartiesTabView: Sending partiesLoaded notification")
                     NotificationCenter.default.post(name: Notification.Name("partiesLoaded"), object: nil)
                 }
@@ -315,7 +409,6 @@ struct PartiesTabView: View {
                     self.isLoading = false
                 }
             }
-        }
     }
     
     func refreshParties() async {
@@ -328,207 +421,186 @@ struct PartiesTabView: View {
         }
     }
     
-    private func filteredParties() -> [Party] {
-        let now = Date()
+    // Cache the date formatter to avoid recreating it on every call
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-
-        return parties.filter { party in
-            let start = party.startDate.flatMap { formatter.date(from: $0) }
-            let end = party.endDate.flatMap { formatter.date(from: $0) }
-            // Check if current user has declined this party
-            let currentUserHasDeclined = party.attendees?.contains { attendee in
-                let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
-                return isDeclined
-            } ?? false
+        return formatter
+    }()
+    
+    @State private var cachedFilteredParties: [Party] = []
+    @State private var lastSelectedTab: PartyTab? = nil
+    
+    private var filteredParties: [Party] {
+        // Return cached result if tab hasn't changed and we have cached data
+        if selectedTab == lastSelectedTab && !cachedFilteredParties.isEmpty {
+            return cachedFilteredParties
+        }
+        
+        // If parties are empty, return empty array immediately
+        guard !parties.isEmpty else {
+            return []
+        }
+        
+        let now = Date()
+        
+        let filtered = parties.filter { party in
+            // Find current user's status
+            let currentUserStatus = party.attendees?.first { $0.isCurrentUser }?.status
+            let isDeclined = currentUserStatus == "declined"
             
-            // Check if current user has pending status for this party
-            let currentUserHasPending = party.attendees?.contains { attendee in
-                let isPending = attendee.isCurrentUser && attendee.status == "pending"
-                return isPending
-            } ?? false
-            
-            
-            // Handle parties without dates - show them only in Upcoming
-            guard let start = start, let end = end else {
-                return selectedTab == .upcoming && !(currentUserHasDeclined || currentUserHasPending)
+            // If declined, always show in declined tab
+            if isDeclined {
+                return selectedTab == .declined
             }
-
-            let isFuture = start > now
-            let isInProgress = start <= now && end >= now
+            
+            // Parse dates
+            let _ = party.startDate.flatMap { Self.dateFormatter.date(from: $0) } // start date not used for filtering
+            let end = party.endDate.flatMap { Self.dateFormatter.date(from: $0) }
+            
+            // Handle parties without dates - treat as upcoming
+            guard let end = end else {
+                return selectedTab == .upcoming
+            }
+            
             let isPast = end < now
-
+            
             switch selectedTab {
             case .upcoming:
-                return isFuture && !(currentUserHasDeclined || currentUserHasPending)
-            case .pending:
-                return isFuture && currentUserHasPending
+                return !isPast
+            case .past:
+                return isPast
             case .declined:
-                return isFuture && currentUserHasDeclined
-            case .inprogress:
-                return isInProgress && !(currentUserHasDeclined || currentUserHasPending)
-            case .attended:
-                return isPast && !(currentUserHasDeclined || currentUserHasPending)
-            case .didntgo:
-                return isPast && (currentUserHasDeclined || currentUserHasPending)
+                return false // Already handled above
+            case .pending, .inprogress, .attended, .didntgo:
+                return false // These tabs are not used in this view
             }
         }
-        .sorted { lhs, rhs in
-            let lhsStart = lhs.startDate.flatMap { formatter.date(from: $0) }
-            let rhsStart = rhs.startDate.flatMap { formatter.date(from: $0) }
-            let lhsEnd = lhs.endDate.flatMap { formatter.date(from: $0) }
-            let rhsEnd = rhs.endDate.flatMap { formatter.date(from: $0) }
+        
+        let sorted = filtered.sorted { lhs, rhs in
+            let lhsStart = lhs.startDate.flatMap { Self.dateFormatter.date(from: $0) }
+            let rhsStart = rhs.startDate.flatMap { Self.dateFormatter.date(from: $0) }
+            let lhsEnd = lhs.endDate.flatMap { Self.dateFormatter.date(from: $0) }
+            let rhsEnd = rhs.endDate.flatMap { Self.dateFormatter.date(from: $0) }
 
             switch selectedTab {
             case .upcoming:
-                // Sort parties without dates to the end, then by start date
+                // Sort by start date (parties without dates go to end)
                 if lhsStart == nil && rhsStart != nil {
                     return false
                 } else if lhsStart != nil && rhsStart == nil {
                     return true
                 } else if lhsStart == nil && rhsStart == nil {
-                    // Both have no dates, sort by name
                     return lhs.name < rhs.name
                 } else {
                     return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
                 }
-            case .inprogress:
-                return (lhsEnd ?? .distantFuture) < (rhsEnd ?? .distantFuture)
-            case .attended:
-                return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
-            case .didntgo:
+            case .past:
+                // Sort by end date (most recent first)
                 return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
             case .declined:
-                return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
-            case .pending:
-                return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
+                // Sort declined parties: future parties first (closest to today), then past parties (most recent first)
+                let lhsEnd = lhs.endDate.flatMap { Self.dateFormatter.date(from: $0) }
+                let rhsEnd = rhs.endDate.flatMap { Self.dateFormatter.date(from: $0) }
+                let now = Date()
+                
+                let lhsIsFuture = (lhsEnd ?? .distantFuture) > now
+                let rhsIsFuture = (rhsEnd ?? .distantFuture) > now
+                
+                // If one is future and one is past, future comes first
+                if lhsIsFuture && !rhsIsFuture {
+                    return true
+                } else if !lhsIsFuture && rhsIsFuture {
+                    return false
+                } else if lhsIsFuture && rhsIsFuture {
+                    // Both future: sort by start date (closest to today first)
+                    return (lhsStart ?? .distantFuture) < (rhsStart ?? .distantFuture)
+                } else {
+                    // Both past: sort by end date (most recent first)
+                    return (lhsEnd ?? .distantPast) > (rhsEnd ?? .distantPast)
+                }
+            case .pending, .inprogress, .attended, .didntgo:
+                // These tabs are not used in this view, default sorting
+                return lhs.name < rhs.name
             }
         }
+        
+        // Update cache asynchronously after returning the result
+        DispatchQueue.main.async {
+            self.cachedFilteredParties = sorted
+            self.lastSelectedTab = self.selectedTab
+        }
+        
+        return sorted
     }
     
-    @State private var hasCheckedForInProgressOnLaunch = false
     
-    private func checkForInProgressParties() {
-        let now = Date()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        
-        print("🔍 checkForInProgressParties: Checking \(parties.count) parties")
-        print("🔍 Current date: \(now)")
-        print("🔍 Has checked on launch: \(hasCheckedForInProgressOnLaunch)")
-        
-        // Check if there are any in-progress parties (excluding declined and pending ones)
-        let hasInProgressParties = parties.contains { party in
-            // Skip declined parties
-            let currentUserHasDeclined = party.attendees?.contains { attendee in
-                attendee.isCurrentUser && attendee.status == "declined"
-            } ?? false
-            
-            // Skip pending parties
-            let currentUserHasPending = party.attendees?.contains { attendee in
-                attendee.isCurrentUser && attendee.status == "pending"
-            } ?? false
-            
-            if currentUserHasDeclined || currentUserHasPending {
-                return false
-            }
-            
-            guard let start = party.startDate.flatMap({ formatter.date(from: $0) }),
-                  let end = party.endDate.flatMap({ formatter.date(from: $0) }) else {
-                print("🔍 Party '\(party.name)' has no dates")
-                return false
-            }
-            let isInProgress = start <= now && end >= now
-            print("🔍 Party '\(party.name)': start=\(start), end=\(end), inProgress=\(isInProgress)")
-            return isInProgress
-        }
-        
-        print("🔍 Has in-progress parties: \(hasInProgressParties)")
-        print("🔍 Current selected tab: \(selectedTab)")
-        
-        // Only auto-switch to in-progress on app launch, not when returning from a party
-        if hasInProgressParties && selectedTab == .upcoming && !hasCheckedForInProgressOnLaunch {
-            print("🔍 Switching to in-progress tab on app launch")
-            selectedTab = .inprogress
-        }
-        
-        // Mark that we've checked for in-progress parties on launch
-        hasCheckedForInProgressOnLaunch = true
-    }
+    @State private var cachedPartyCounts: [PartyTab: Int]? = nil
     
     private func sendPartyCounts() {
+        // Return cached counts if available and parties haven't changed
+        if let cached = cachedPartyCounts, !parties.isEmpty {
+            DispatchQueue.main.async {
+                self.partyCounts = cached
+                NotificationCenter.default.post(
+                    name: Notification.Name("partyCountsUpdated"),
+                    object: nil,
+                    userInfo: ["counts": cached]
+                )
+            }
+            return
+        }
+        
         let now = Date()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
         
         var counts: [PartyTab: Int] = [
             .upcoming: 0,
-            .pending: 0,
-            .declined: 0,
-            .inprogress: 0,
-            .attended: 0,
-            .didntgo: 0
+            .past: 0,
+            .declined: 0
         ]
         
         for party in parties {
-            let start = party.startDate.flatMap { formatter.date(from: $0) }
-            let end = party.endDate.flatMap { formatter.date(from: $0) }
-            // Check if current user has declined this party
-            let currentUserHasDeclined = party.attendees?.contains { attendee in
-                let isDeclined = attendee.isCurrentUser && attendee.status == "declined"
-                return isDeclined
-            } ?? false
+            // Find current user's status
+            let currentUserStatus = party.attendees?.first { $0.isCurrentUser }?.status
+            let isDeclined = currentUserStatus == "declined"
             
-            // Check if current user has pending status for this party
-            let currentUserHasPending = party.attendees?.contains { attendee in
-                let isPending = attendee.isCurrentUser && attendee.status == "pending"
-                return isPending
-            } ?? false
-            
-            
-            if currentUserHasDeclined {
-                if let end = end, end < now {
-                    counts[.didntgo]? += 1
-                } else {
-                    counts[.declined]? += 1
-                }
-                continue // Skip counting in other categories
+            // If declined, count in declined tab
+            if isDeclined {
+                counts[.declined]? += 1
+                continue
             }
             
-            if currentUserHasPending {
-                if let end = end, end < now {
-                    counts[.didntgo]? += 1
-                } else {
-                    counts[.pending]? += 1
-                }
-                continue // Skip counting in other categories
-            }
+            // Parse end date to determine if past
+            let end = party.endDate.flatMap { Self.dateFormatter.date(from: $0) }
             
-            guard let start = start,
-                  let end = end else {
-                // If no dates are set, count as upcoming
+            // Handle parties without dates - treat as upcoming
+            guard let end = end else {
                 counts[.upcoming]? += 1
                 continue
             }
             
-            if start > now {
-                counts[.upcoming]? += 1
-            } else if start <= now && end >= now {
-                counts[.inprogress]? += 1
+            let isPast = end < now
+            
+            if isPast {
+                counts[.past]? += 1
             } else {
-                counts[.attended]? += 1
+                counts[.upcoming]? += 1
             }
         }
         
-        // Update local party counts
-        self.partyCounts = counts
+        // Cache the counts and update state asynchronously
+        cachedPartyCounts = counts
         
-        // Send the counts to MainTabView
-        NotificationCenter.default.post(
-            name: Notification.Name("partyCountsUpdated"),
-            object: nil,
-            userInfo: ["counts": counts]
-        )
+        DispatchQueue.main.async {
+            self.partyCounts = counts
+            
+            // Send the counts to MainTabView
+            NotificationCenter.default.post(
+                name: Notification.Name("partyCountsUpdated"),
+                object: nil,
+                userInfo: ["counts": counts]
+            )
+        }
     }
 
 }

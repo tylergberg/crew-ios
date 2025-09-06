@@ -35,11 +35,18 @@ struct NameCollectionView: View {
                         .font(.title2.weight(.bold))
                         .foregroundColor(.primary)
                     
-                    if fromInvite, let partyName = invitePartyName {
-                        Text("Help your friends recognize you in \(partyName)")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+                    if fromInvite {
+                        if let partyName = invitePartyName {
+                            Text("Help your friends recognize you in \(partyName)")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        } else {
+                            Text("Help your friends recognize you in the party")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
                     } else {
                         Text("Help your friends recognize you in parties")
                             .font(.body)
@@ -150,6 +157,12 @@ struct NameCollectionView: View {
                     // Clear the name collection flag
                     authManager.needsNameCollection = false
                     authManager.pendingPhoneNumber = ""
+                    authManager.isInPhoneOnboarding = false
+                    
+                    // Clear pending party data if this was from an invite
+                    if fromInvite {
+                        authManager.clearStoredInviteData()
+                    }
                     
                     if fromInvite, let partyId = invitePartyId {
                         // User came from an invite, navigate directly to the party
@@ -198,6 +211,26 @@ struct NameCollectionView: View {
         
         // Update the auth user's metadata with the name (like phone update feature)
         try await updateAuthUserMetadata(fullName: fullName)
+        
+        // Mark onboarding as completed
+        try await markOnboardingCompleted()
+    }
+    
+    private func markOnboardingCompleted() async throws {
+        guard let userId = AuthManager.shared.currentUserId else {
+            throw NSError(domain: "NameCollectionView", code: 1, userInfo: [NSLocalizedDescriptionKey: "No current user ID"])
+        }
+        
+        let update = try await SupabaseManager.shared.client
+            .from("profiles")
+            .update([
+                "onboarding_completed": AnyJSON.bool(true),
+                "onboarding_stage": AnyJSON.string("done")
+            ])
+            .eq("id", value: userId)
+            .execute()
+        
+        print("✅ Onboarding marked as completed for user: \(userId)")
     }
     
     private func updateAuthUserMetadata(fullName: String) async throws {

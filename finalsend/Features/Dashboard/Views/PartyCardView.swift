@@ -98,8 +98,8 @@ struct PartyCardView: View {
                             .foregroundColor(currentTheme.primaryAccentColor)
                             .frame(width: 16)
                         
-                        if let attendees = party.attendees, !attendees.isEmpty {
-                            Text("Crew of \(attendees.count)")
+                        if let attendeeCount = party.attendeeCount, attendeeCount > 0 {
+                            Text("Crew of \(attendeeCount)")
                                 .font(.subheadline)
                                 .foregroundColor(currentTheme.textSecondaryColor)
                         } else {

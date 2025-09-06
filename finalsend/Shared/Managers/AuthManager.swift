@@ -1,4 +1,4 @@
-import Foundation
+@preconcurrency import Foundation
 import Supabase
 import Combine
 
@@ -474,14 +474,21 @@ class AuthManager: ObservableObject {
             if let partyId = await acceptPendingInviteIfAny() {
                 AppLogger.success("ULINK invite accepted successfully, party_id: \(partyId)")
                 hasProcessedPendingInvites = true
-                isProcessingInvite = false
+                
+                // Keep processing state active to show loading screen
+                isProcessingInvite = true
                 
                 // Post notification to refresh parties list in dashboard
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .refreshPartyData, object: nil)
                 }
                 
+                // Wait for parties to refresh, then navigate
+                await waitForPartiesToRefresh()
                 AppNavigator.shared.navigateToParty(partyId)
+                
+                // Clear processing state
+                isProcessingInvite = false
                 return
             } else {
                 AppLogger.error("Failed to accept ULINK invite")
@@ -507,14 +514,21 @@ class AuthManager: ObservableObject {
         if let partyId = await acceptPendingInviteIfAny() {
             print("✅ Pending invite processed after auth, navigating to party: \(partyId)")
             hasProcessedPendingInvites = true
-            isProcessingInvite = false
+            
+            // Keep processing state active to show loading screen
+            isProcessingInvite = true
             
             // Post notification to refresh parties list in dashboard
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .refreshPartyData, object: nil)
             }
             
+            // Wait for parties to refresh, then navigate
+            await waitForPartiesToRefresh()
             AppNavigator.shared.navigateToParty(partyId)
+            
+            // Clear processing state
+            isProcessingInvite = false
         } else {
             print("🔍 No pending invite to process")
             isProcessingInvite = false
@@ -580,10 +594,8 @@ class AuthManager: ObservableObject {
             // Set a flag to indicate this was a Universal Link join
             UserDefaults.standard.set(true, forKey: "universal_link_join_\(partyId)")
             
-            // Post notification to refresh parties list in dashboard
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .refreshPartyData, object: nil)
-            }
+            // Don't send refresh notification here - let the caller handle it
+            // to ensure proper synchronization with waitForPartiesToRefresh()
             
             return partyId
         } catch {
@@ -813,5 +825,39 @@ class AuthManager: ObservableObject {
         
         // Default: assume US number and add +1
         return "+1\(digitsOnly)"
+    }
+    
+    /// Wait for parties to refresh after invite acceptance
+    private func waitForPartiesToRefresh() async {
+        // Wait for the partiesLoaded notification to ensure parties are refreshed
+        await withCheckedContinuation { continuation in
+            var observer: NSObjectProtocol?
+            var hasResumed = false
+            
+            observer = NotificationCenter.default.addObserver(
+                forName: Notification.Name("partiesLoaded"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                if let obs = observer {
+                    NotificationCenter.default.removeObserver(obs)
+                }
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume()
+                }
+            }
+            
+            // Fallback timeout after 3 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                if let obs = observer {
+                    NotificationCenter.default.removeObserver(obs)
+                }
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume()
+                }
+            }
+        }
     }
 }
